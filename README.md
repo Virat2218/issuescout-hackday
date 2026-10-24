@@ -76,3 +76,8 @@ Enter `JavaScript, React, CSS`, search, open a result, and explain the model's m
 - **Understanding of implementation (15%)**: explain the GitHub search, local model request, ranking fields, and keyword fallback.
 - **Design and usability (10%)**: demonstrate the responsive interface and clear next step on each result.
 - **Presentation and Q&A (10%)**: use the pitch outline in [`PITCH.md`](PITCH.md); deck timing is 8 minutes for the pitch and 4 minutes for Q&A.
+
+
+## Evidence behind a match
+
+Each result can show up to three short excerpts from the issue title, description, or labels when that text contains a matched skill. The excerpts come directly from GitHub issue data and are escaped before display. If no exact skill phrase appears, IssueScout says so instead of inventing a quote. The AI explanation may still miss context, so read the issue before relying on the recommendation.

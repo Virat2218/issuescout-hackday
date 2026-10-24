@@ -80,6 +80,7 @@ function renderIssues(issues) {
     ].join('');
     const score = Number.isFinite(Number(issue.score)) ? Math.round(issue.score) + '% FIT' : 'MATCH';
     const freshness = formatIssueFreshness(issue.updatedAt);
+        const evidence = getIssueEvidence(issue);
     const issueId = escapeHtml(issue.id || '');
     const picked = Boolean(chosenIssues[issue.id]);
     const pickButtonLabel = picked ? 'Added to my picks' : 'I’d work on this';
@@ -94,6 +95,7 @@ function renderIssues(issues) {
       '<div class="issue-top"><span class="repo">' + escapeHtml(issue.repository) + '</span><span class="score">' + score + '</span>' + similarBadge + '</div>',
       '<h3 class="issue-title"><a href="' + escapeHtml(issue.url) + '" target="_blank" rel="noopener noreferrer">' + escapeHtml(issue.title) + '</a></h3>',
       '<p class="issue-reason">' + escapeHtml(issue.reason) + '</p>',
+            '<div class="issue-evidence"><strong>Evidence from issue</strong>' + (evidence.length ? '<ul>' + evidence.map((item) => '<li><span>' + escapeHtml(item.source) + '</span>: “' + escapeHtml(item.quote) + '”</li>').join('') + '</ul>' : '<p class="no-evidence">No exact skill phrase found in the issue text. Review it before relying on this match.</p>') + '</div>',
       '<div class="tags">' + tags + '</div>',
       '<div class="issue-bottom"><span class="first-step"><b>First step</b> · ' + escapeHtml(issue.firstStep) + '</span><div class="issue-actions"><button class="pick-button' + (picked ? ' picked' : '') + '" type="button" data-issue-id="' + issueId + '" aria-pressed="' + picked + '">' + pickButtonLabel + '</button><a class="open-link" href="' + escapeHtml(issue.url) + '" target="_blank" rel="noopener noreferrer">View issue ↗</a></div></div>',
       '<p class="' + freshnessClass + '"><span>' + escapeHtml(freshness.label) + '</span> · ' + freshnessNote + '</p>',
@@ -172,3 +174,25 @@ form.addEventListener('submit', async (event) => {
 });
 
 checkStatus();
+
+function getIssueEvidence(issue) {
+  const fields = [
+    { source: 'Issue title', text: String(issue.title || '') },
+    { source: 'Issue description', text: String(issue.body || '') },
+    { source: 'Issue labels', text: (issue.labels || []).join(', ') },
+  ];
+  const seen = new Set();
+  return (Array.isArray(issue.matchedSkills) ? issue.matchedSkills : []).slice(0, 3).flatMap((skill) => {
+    const needle = String(skill || '').trim();
+    const normalized = needle.toLowerCase();
+    if (!normalized || seen.has(normalized)) return [];
+    const field = fields.find(({ text }) => text.toLowerCase().includes(normalized));
+    if (!field) return [];
+    seen.add(normalized);
+    const index = field.text.toLowerCase().indexOf(normalized);
+    const start = Math.max(0, index - 55);
+    const end = Math.min(field.text.length, index + needle.length + 65);
+    const quote = (start > 0 ? '…' : '') + field.text.slice(start, end).trim() + (end < field.text.length ? '…' : '');
+    return [{ source: field.source, quote }];
+  });
+}
