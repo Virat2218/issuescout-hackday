@@ -22,6 +22,9 @@ The model and runtime are separate downloads; IssueScout does not redistribute t
 2. Optionally filters candidates to issues that mention at least one chosen language or framework in the title, description, labels, or repository.
 3. Sends the remaining issue text and the contributor's skills to a local Ollama model for ranking and evidence-based explanations.
 4. Shows matched skills, freshness, a first action, and a direct link to each issue.
+5. Lets contributors mark issues they would work on and moves later issues with similar labels or matched skills higher in the list.
+
+A pick stores only the GitHub issue ID, labels, and matched skills in this browser. The pick history is never sent to the server, and personalization only reorders the returned shortlist; it does not change the model fit score.
 
 The model does not decide whether an issue is open. GitHub's live search results supply that state. Issue titles and descriptions are sent only to the local Ollama service; the GitHub search itself is public and goes to GitHub.
 
@@ -51,6 +54,7 @@ To change the model or port, set `OLLAMA_MODEL` or `PORT` before starting the se
 ## How the AI is used
 
 The server searches GitHub for issues marked `good first issue` or `help wanted`. An optional technology focus filters the candidates by their title, description, labels, or repository before the local model ranks up to 20 issues against the user's skills. The model returns a score, matched skills, a short reason, and a first action. GitHub supplies the open and unassigned filters; the model does not decide whether an issue is still available. The fallback uses keyword overlap only and is clearly labeled, so it should not be presented as an AI result.
+When someone marks an issue as a pick, the browser stores its GitHub issue ID, labels, and matched skills in local storage. Later results with overlapping labels or matched skills move higher; no pick history is included in the search request.
 
 ## 12-hour build plan
 
