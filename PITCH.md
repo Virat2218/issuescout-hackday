@@ -12,7 +12,7 @@ IssueScout starts with the skills a contributor already has and returns a short 
 
 1. Enter `JavaScript, React, CSS`.
 2. Search GitHub and show the local model status.
-3. Open one result and point out its labels, skill match, reason, and first step.
+3. Open one result and show the matched skill, read the reason, and compare it with the evidence excerpt from the issue text.
 4. Follow the link to GitHub and confirm that the issue remains open and unassigned.
 5. Mark one issue as “I’d work on this,” search again, and show similar suggestions moving higher.
 
