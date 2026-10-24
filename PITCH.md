@@ -6,7 +6,7 @@ First-time contributors want to help open-source projects, but a search for begi
 
 ## 0:45–1:15 — Product
 
-IssueScout starts with the skills a contributor already has and returns a short list of open, unassigned starter issues. Each result shows why it may fit and one practical first step.
+IssueScout starts with the skills a contributor already has and returns a short list of open, unassigned starter issues. Contributors can optionally filter for a language or framework they want to work with. Each result shows why it may fit, when it was updated, and one practical first step.
 
 ## 1:15–4:30 — Live demo
 
@@ -17,7 +17,7 @@ IssueScout starts with the skills a contributor already has and returns a short 
 
 ## 4:30–5:45 — How it works
 
-The Node.js server queries GitHub for open issues labeled `good first issue` or `help wanted`, filters unassigned issues, and sends up to 20 candidates plus the skill list to Qwen2.5-1.5B-Instruct running locally with Ollama. The model ranks the candidates and returns a score, matched skills, a reason, and a first action. A visible keyword fallback is available if local inference fails.
+The Node.js server queries GitHub for open issues labeled `good first issue` or `help wanted`, filters unassigned issues, and optionally narrows candidates to those mentioning a requested technology. It sends up to 20 candidates plus the skill list to Qwen2.5-1.5B-Instruct running locally with Ollama. The model ranks the candidates and returns a score, matched skills, a reason, and a first action. A visible keyword fallback is available if local inference fails.
 
 ## 5:45–6:30 — Responsible limits
 
@@ -25,7 +25,7 @@ The model can make a poor match or miss context. GitHub supplies the issue state
 
 ## 6:30–7:15 — Next improvements
 
-Prioritize fresher issues, add language and framework filters, and learn from which suggested issues contributors actually choose. Keep the local model and show evidence for every recommendation.
+Learn from which suggested issues contributors actually choose and improve match explanations over time. Keep the local model and show evidence for every recommendation.
 
 ## 7:15–8:00 — Close
 
@@ -35,6 +35,6 @@ IssueScout helps a newcomer turn what they already know into a specific first co
 
 - **What makes this AI-powered?** The local open-weight model compares skill context with issue descriptions and generates ranked, evidence-based reasons. GitHub remains the source of truth for issue status.
 - **Why a local model?** It makes the ranking work without sending issue text or the user's skills to a hosted model provider.
-- **How do you prevent stale suggestions?** GitHub search filters for open, unassigned issues and sorts by update time. A future improvement is a visible freshness threshold and warning.
+- **How do you prevent stale suggestions?** GitHub search filters for open, unassigned issues and sorts by update time. IssueScout shows the last update age and warns when an issue has not changed in more than 90 days.
 - **What are the current limits?** Search depends on GitHub availability and rate limits. The local model can mis-rank issues, so users should verify the issue and contribution guide.
 - **How is the project licensed?** IssueScout is MIT licensed. The default model is Apache-2.0 and Ollama is MIT; see the README for the component list.

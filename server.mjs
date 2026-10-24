@@ -134,7 +134,14 @@ const server = http.createServer(async (req, res) => {
       const input = await bodyJson(req);
       const skills = String(input.skills || '').split(',').map((skill) => skill.trim()).filter(Boolean).slice(0, 12);
       if (!skills.length) return send(res, 400, { error: 'Enter at least one skill or technology.' });
-      const issues = await searchGitHub();
+      const technologies = String(input.technologies || '').split(',').map((technology) => technology.trim()).filter(Boolean).slice(0, 8);
+      let issues = await searchGitHub();
+      if (technologies.length) {
+        issues = issues.filter((issue) => {
+          const searchable = `${issue.title} ${issue.body} ${issue.repository} ${issue.labels.join(' ')}`.toLowerCase();
+          return technologies.some((technology) => searchable.includes(technology.toLowerCase()));
+        });
+      }
       if (!issues.length) return send(res, 200, { issues: [], rankingMode: 'none' });
       try {
         const ranked = await rankWithOllama(issues, skills);

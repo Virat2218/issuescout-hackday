@@ -19,8 +19,9 @@ The model and runtime are separate downloads; IssueScout does not redistribute t
 ## What the MVP does
 
 1. Searches GitHub for open, unassigned issues tagged `good first issue` or `help wanted`.
-2. Sends issue text and the contributor's skill list to a local Ollama model for ranking and evidence-based explanations.
-3. Shows the matched skills, a first action, and a direct link to each issue.
+2. Optionally filters candidates to issues that mention at least one chosen language or framework in the title, description, labels, or repository.
+3. Sends the remaining issue text and the contributor's skills to a local Ollama model for ranking and evidence-based explanations.
+4. Shows matched skills, freshness, a first action, and a direct link to each issue.
 
 The model does not decide whether an issue is open. GitHub's live search results supply that state. Issue titles and descriptions are sent only to the local Ollama service; the GitHub search itself is public and goes to GitHub.
 
@@ -49,7 +50,7 @@ To change the model or port, set `OLLAMA_MODEL` or `PORT` before starting the se
 
 ## How the AI is used
 
-The server searches GitHub for issues marked `good first issue` or `help wanted`, then asks the local model to rank up to 20 candidate issues against the user's skills. The model returns a score, matched skills, a short reason, and a first action. GitHub supplies the open and unassigned filters; the model does not decide whether an issue is still available. The fallback uses keyword overlap only and is clearly labeled, so it should not be presented as an AI result.
+The server searches GitHub for issues marked `good first issue` or `help wanted`. An optional technology focus filters the candidates by their title, description, labels, or repository before the local model ranks up to 20 issues against the user's skills. The model returns a score, matched skills, a short reason, and a first action. GitHub supplies the open and unassigned filters; the model does not decide whether an issue is still available. The fallback uses keyword overlap only and is clearly labeled, so it should not be presented as an AI result.
 
 ## 12-hour build plan
 
@@ -61,7 +62,7 @@ The server searches GitHub for issues marked `good first issue` or `help wanted`
 
 ## Demo flow
 
-Enter `JavaScript, React, CSS`, search, open a result, and explain the model's match against the actual issue text. Then show the issue on GitHub to verify that it is still open and unassigned.
+Enter `JavaScript, React, CSS`, search, open a result, and explain the model's match against the actual issue text. Point out the issue's update age and any stale warning, then show it on GitHub to verify that it is still open and unassigned.
 
 ## Judging focus
 
