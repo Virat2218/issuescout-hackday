@@ -82,84 +82,215 @@ function detectReferencedFiles(body) {
 }
 
 /**
- * Estimate difficulty level of a GitHub issue using heuristics.
- * Returns { level: 'beginner'|'intermediate'|'advanced'|'unknown', explanation: string, confidence: 'label'|'heuristic'|'low' }
- * Does NOT call the AI model — runs cheaply on every issue synchronously.
+ * Estimate difficulty level of a GitHub issue using deterministic heuristics.
+ * Returns a rich structured object:
+ *   { level, explanation, confidence, signals, uncertainty, referencedFiles, bodyLength }
+ *
+ * - level: 'beginner' | 'intermediate' | 'advanced' | 'unknown'
+ * - explanation: human-readable summary of why this level was assigned
+ * - confidence: 'label' (explicit label match) | 'heuristic' (pattern analysis) | 'low' (insufficient data)
+ * - signals: array of { factor, found, weight } — evidence supporting the estimate
+ * - uncertainty: array of strings — what information is missing or conflicting
+ * - referencedFiles: number of files explicitly mentioned in the issue body
+ * - bodyLength: length of the issue body in characters
+ *
+ * Does NOT call the AI model — runs synchronously on every issue.
+ * The `good first issue` label alone does NOT guarantee a Beginner rating.
+ * The `help wanted` label is NOT treated as a difficulty signal.
  */
 function estimateDifficulty(issue) {
-  const labelStr = (issue.labels || []).join(' ').toLowerCase();
-  const titleStr = (issue.title || '').toLowerCase();
-  const bodyStr  = (issue.body  || '').toLowerCase();
-  const combined = `${titleStr} ${bodyStr} ${labelStr}`;
+  const labels     = (issue.labels || []);
+  const labelStr   = labels.join(' ').toLowerCase();
+  const titleStr   = (issue.title || '').toLowerCase();
+  const bodyStr    = (issue.body  || '').toLowerCase();
+  const combined   = `${titleStr} ${bodyStr} ${labelStr}`;
+  const bodyLength = (issue.body || '').length;
+  const referencedFiles = detectReferencedFiles(issue.body || '');
+  const commentCount = issue.comments || 0;
 
-  // ── 1. Explicit label signals (highest confidence) ──────────────────
-  const BEGINNER_LABELS = /\b(good[- ]first[- ]issue|beginner|first[- ]timer|easy|starter|hacktoberfest|introductory|newbie)\b/;
-  const INTERMEDIATE_LABELS = /\b(difficulty[:-]medium|skill[:-]intermediate|moderate|help[- ]wanted)\b/;
-  const ADVANCED_LABELS = /\b(difficulty[:-]hard|difficulty[:-]advanced|complexity[:-]high|senior|expert|complex|performance|security|architecture)\b/;
+  const signals = [];     // evidence collected
+  const uncertainty = [];  // missing or conflicting info
 
-  if (ADVANCED_LABELS.test(labelStr)) {
-    return { level: 'advanced', explanation: 'Issue labels indicate advanced complexity.', confidence: 'label' };
+  // ── Track missing information ──────────────────────────────────────────
+  if (!issue.body || bodyLength < 30) {
+    uncertainty.push('Issue description is very short or missing — difficulty estimate may be unreliable.');
   }
-  if (INTERMEDIATE_LABELS.test(labelStr)) {
-    return { level: 'intermediate', explanation: 'Issue labels indicate intermediate difficulty.', confidence: 'label' };
+  if (!labels.length) {
+    uncertainty.push('No labels present — cannot cross-reference difficulty labels.');
   }
-  if (BEGINNER_LABELS.test(labelStr)) {
-    // Even with a beginner label, scope signals can upgrade it
-    const upgradeSignals = [
-      /refactor|architecture|redesign|migration|security|performance|optimize|scale/i.test(combined),
-      /\b(database|auth|oauth|jwt|redis|kubernetes|docker|ci\/cd|pipeline)\b/i.test(combined),
-      (combined.match(/\bfile\b/gi) || []).length > 4, // many file references
+  if (referencedFiles.length === 0 && bodyLength > 100) {
+    uncertainty.push('No specific files referenced — scope of changes is unclear.');
+  }
+
+  // ── 1. Explicit difficulty labels (highest confidence) ─────────────────
+  const ADVANCED_LABEL_RE   = /\b(difficulty[:-]hard|difficulty[:-]advanced|complexity[:-]high|senior|expert)\b/;
+  const INTERMEDIATE_LABEL_RE = /\b(difficulty[:-]medium|skill[:-]intermediate|moderate)\b/;
+  // Note: 'help wanted' is intentionally excluded — it does not indicate difficulty
+  const BEGINNER_LABEL_RE   = /\b(good[- ]first[- ]issue|beginner|first[- ]timer|easy|starter|introductory|newbie)\b/;
+
+  const hasAdvancedLabel     = ADVANCED_LABEL_RE.test(labelStr);
+  const hasIntermediateLabel = INTERMEDIATE_LABEL_RE.test(labelStr);
+  const hasBeginnerLabel     = BEGINNER_LABEL_RE.test(labelStr);
+  const hasHacktoberfest     = /\bhacktoberfest\b/.test(labelStr);
+
+  if (hasAdvancedLabel)     signals.push({ factor: 'Label explicitly marks advanced difficulty', found: true, weight: 'high' });
+  if (hasIntermediateLabel) signals.push({ factor: 'Label explicitly marks intermediate difficulty', found: true, weight: 'high' });
+  if (hasBeginnerLabel)     signals.push({ factor: 'Label marks issue as beginner-friendly (e.g. good first issue)', found: true, weight: 'medium' });
+  if (hasHacktoberfest)     signals.push({ factor: 'Hacktoberfest label — typically beginner-friendly but not guaranteed', found: true, weight: 'low' });
+
+  // ── 2. Scope & complexity signals ──────────────────────────────────────
+  const scopeSignals = {
+    refactorArchitecture: /\b(refactor|redesign|rewrite|overhaul|rearchitect)\b/i.test(combined),
+    securityAuth:         /\b(security|auth|encryption|vulnerability|cve|oauth|jwt)\b/i.test(combined),
+    performance:          /\b(performance|benchmark|optimize|profile|memory leak|race condition)\b/i.test(combined),
+    breakingChange:       /\b(breaking change|api design|schema|migration|upgrade path)\b/i.test(combined),
+    concurrency:          /\b(concurrency|thread|async queue|deadlock|websocket|worker)\b/i.test(combined),
+    infrastructure:       /\b(database|redis|kubernetes|docker|ci\/cd|pipeline|deploy)\b/i.test(combined),
+    testing:              /\b(unit test|integration test|e2e|coverage|mock|fixture)\b/i.test(combined),
+    apiWork:              /\b(api|endpoint|route|middleware|hook|plugin)\b/i.test(combined),
+    configuration:        /\b(configuration|environment|settings|feature flag|env var)\b/i.test(combined),
+    debuggingInvestigation: /\b(debug|investigate|root cause|reproduce|regression|stack trace|segfault)\b/i.test(combined),
+    dependenciesSetup:    /\b(dependency|upgrade dependency|package\.json|cargo\.toml|go\.mod|requirements\.txt|setup guide|toolchain)\b/i.test(combined),
+    documentation:        /\b(documentation|readme|contributing|changelog|docs?)\b/i.test(combined),
+    typoSmallFix:         /\b(typo|spelling|grammar|comment|rename|broken link|lint|format)\b/i.test(combined),
+    smallTitle:           /\b(fix|update|correct|remove|add \w+ to)\b/i.test(titleStr),
+  };
+
+  const entityMentions = (bodyStr.match(/\b(file|class|module|function|component|hook|method|interface|struct)\b/gi) || []).length;
+  const heavyDiscussion = commentCount > 15;
+  const longBody = bodyLength > 600;
+  const shortBody = bodyLength < 250 && titleStr.length < 80;
+  const singleFile = referencedFiles.length === 1;
+  const manyFiles = referencedFiles.length > 3;
+  const manyEntities = entityMentions > 8;
+  const hasAcceptanceCriteria = /acceptance criteria|tasks|to-do|\bchecklist\b/i.test(bodyStr);
+  const hasTestRequirement = /\btest|pytest|jest|npm test|cargo test|go test\b/i.test(bodyStr);
+
+  // Record what was found
+  if (scopeSignals.refactorArchitecture) signals.push({ factor: 'Mentions refactoring or architectural changes', found: true, weight: 'high' });
+  if (scopeSignals.securityAuth)         signals.push({ factor: 'Involves security, authentication, or encryption', found: true, weight: 'high' });
+  if (scopeSignals.performance)          signals.push({ factor: 'Performance optimization or profiling required', found: true, weight: 'high' });
+  if (scopeSignals.breakingChange)       signals.push({ factor: 'Breaking changes, schema migration, or API design', found: true, weight: 'high' });
+  if (scopeSignals.concurrency)          signals.push({ factor: 'Concurrency, threading, or async queue work', found: true, weight: 'high' });
+  if (scopeSignals.infrastructure)       signals.push({ factor: 'Infrastructure or deployment (database, Docker, CI/CD)', found: true, weight: 'medium' });
+  if (scopeSignals.testing)              signals.push({ factor: 'Testing requirements (unit, integration, or e2e)', found: true, weight: 'medium' });
+  if (scopeSignals.apiWork)              signals.push({ factor: 'API, endpoint, or middleware work', found: true, weight: 'medium' });
+  if (scopeSignals.configuration)        signals.push({ factor: 'Configuration or environment setup changes', found: true, weight: 'medium' });
+  if (scopeSignals.debuggingInvestigation) signals.push({ factor: 'Requires debugging, root cause analysis, or regression reproduction', found: true, weight: 'medium' });
+  if (scopeSignals.dependenciesSetup)    signals.push({ factor: 'Dependency management, toolchain, or setup requirements', found: true, weight: 'medium' });
+  if (scopeSignals.documentation)        signals.push({ factor: 'Documentation or README changes', found: true, weight: 'low' });
+  if (scopeSignals.typoSmallFix)         signals.push({ factor: 'Small fix (typo, lint, formatting, broken link)', found: true, weight: 'low' });
+  if (manyFiles)        signals.push({ factor: `${referencedFiles.length} files referenced — broad change scope`, found: true, weight: 'medium' });
+  if (singleFile)       signals.push({ factor: 'Single file referenced — narrow scope', found: true, weight: 'low' });
+  if (manyEntities)     signals.push({ factor: `${entityMentions} code entities mentioned — large surface area`, found: true, weight: 'medium' });
+  if (heavyDiscussion)  signals.push({ factor: `${commentCount} comments — indicates complex or contested design`, found: true, weight: 'medium' });
+  if (longBody)         signals.push({ factor: 'Long issue description (>600 chars) — detailed requirements', found: true, weight: 'low' });
+  if (hasAcceptanceCriteria) signals.push({ factor: 'Has acceptance criteria or task checklist', found: true, weight: 'low' });
+
+  // ── 3. Score each level ────────────────────────────────────────────────
+  // Count weighted signals for advanced
+  const advancedScore = [
+    scopeSignals.refactorArchitecture,
+    scopeSignals.securityAuth,
+    scopeSignals.performance,
+    scopeSignals.breakingChange,
+    scopeSignals.concurrency,
+    heavyDiscussion,
+    manyEntities,
+    manyFiles,
+  ].filter(Boolean).length;
+
+  const intermediateScore = [
+    scopeSignals.apiWork,
+    scopeSignals.testing,
+    scopeSignals.configuration,
+    scopeSignals.infrastructure,
+    scopeSignals.debuggingInvestigation,
+    scopeSignals.dependenciesSetup,
+    advancedScore >= 1,
+    longBody,
+    hasTestRequirement,
+  ].filter(Boolean).length;
+
+  const beginnerScore = [
+    scopeSignals.typoSmallFix,
+    scopeSignals.smallTitle,
+    scopeSignals.documentation,
+    shortBody,
+    singleFile,
+  ].filter(Boolean).length;
+
+  // ── 4. Determine level with conflict resolution ────────────────────────
+  let level, explanation, confidence;
+
+  if (hasAdvancedLabel) {
+    level = 'advanced';
+    explanation = 'Issue labels explicitly indicate advanced complexity.';
+    confidence = 'label';
+  } else if (hasIntermediateLabel) {
+    level = 'intermediate';
+    explanation = 'Issue labels explicitly indicate intermediate difficulty.';
+    confidence = 'label';
+  } else if (hasBeginnerLabel) {
+    // CRITICAL: do NOT assign beginner solely from label — check for scope upgrades
+    const scopeUpgradeCount = [
+      scopeSignals.refactorArchitecture,
+      scopeSignals.securityAuth,
+      scopeSignals.performance,
+      scopeSignals.infrastructure,
+      scopeSignals.concurrency,
+      manyFiles,
+      manyEntities,
     ].filter(Boolean).length;
-    if (upgradeSignals >= 2) {
-      return { level: 'intermediate', explanation: 'Labelled as beginner-friendly but scope hints at moderate complexity (refactor/architecture/infrastructure).', confidence: 'heuristic' };
+
+    if (scopeUpgradeCount >= 3) {
+      level = 'advanced';
+      explanation = 'Labelled beginner-friendly, but scope analysis reveals advanced complexity (multiple high-weight signals detected).';
+      confidence = 'heuristic';
+      uncertainty.push('Beginner label conflicts with detected complexity signals — the label may be inaccurate.');
+    } else if (scopeUpgradeCount >= 1 || intermediateScore >= 2) {
+      level = 'intermediate';
+      explanation = 'Labelled beginner-friendly, but scope hints at moderate complexity (infrastructure, refactoring, or broad changes).';
+      confidence = 'heuristic';
+      uncertainty.push('Beginner label partially conflicts with scope signals — verify task boundaries before starting.');
+    } else {
+      level = 'beginner';
+      explanation = 'Issue is labelled for first-time contributors and scope analysis confirms limited complexity.';
+      confidence = 'label';
     }
-    return { level: 'beginner', explanation: 'Issue is explicitly labelled for first-time contributors.', confidence: 'label' };
+  } else if (advancedScore >= 3) {
+    level = 'advanced';
+    explanation = 'Multiple complexity signals detected: ' + signals.filter(s => s.weight === 'high').map(s => s.factor.toLowerCase()).slice(0, 3).join(', ') + '.';
+    confidence = 'heuristic';
+  } else if (intermediateScore >= 3) {
+    level = 'intermediate';
+    explanation = 'Issue involves building or integrating functionality — testing, API work, or configuration changes detected.';
+    confidence = 'heuristic';
+  } else if (beginnerScore >= 2) {
+    level = 'beginner';
+    explanation = 'Small, well-scoped change (typo, docs, or minor fix) — good for first contributions.';
+    confidence = 'heuristic';
+  } else {
+    level = 'unknown';
+    explanation = 'Not enough evidence in labels or description to estimate difficulty reliably.';
+    confidence = 'low';
+    uncertainty.push('Consider reading the full issue thread on GitHub for additional context.');
   }
 
-  // ── 2. Advanced heuristic signals ───────────────────────────────────
-  const advancedSignals = [
-    /\b(refactor|redesign|rewrite|overhaul)\b/i.test(titleStr),
-    /\b(security|auth|encryption|vulnerability|cve)\b/i.test(combined),
-    /\b(performance|benchm|optimize|profile|memory leak|race condition)\b/i.test(combined),
-    /\b(breaking change|api design|schema|migration|upgrade)\b/i.test(combined),
-    /\b(concurrency|thread|async queue|deadlock|websocket)\b/i.test(combined),
-    (issue.comments || 0) > 15,
-    (bodyStr.match(/\b(file|class|module|function|component|hook)\b/gi) || []).length > 8,
-  ].filter(Boolean).length;
-
-  if (advancedSignals >= 3) {
-    return { level: 'advanced', explanation: 'Multiple complexity signals detected: broad scope, security/performance concerns, or heavy discussion.', confidence: 'heuristic' };
+  // ── 5. Detect conflicting signals ──────────────────────────────────────
+  if (beginnerScore >= 2 && advancedScore >= 2) {
+    uncertainty.push('Issue shows both beginner-friendly and advanced signals — difficulty may vary depending on approach.');
   }
 
-  // ── 3. Intermediate heuristic signals ───────────────────────────────
-  const intermediateSignals = [
-    /\b(add|implement|create|build|integrate)\b/i.test(titleStr),
-    /\b(unit test|integration test|e2e|coverage|mock)\b/i.test(combined),
-    /\b(api|endpoint|route|middleware|hook|plugin)\b/i.test(combined),
-    /\b(configuration|environment|settings|feature flag)\b/i.test(combined),
-    advancedSignals >= 1,
-    (bodyStr.length > 600),
-  ].filter(Boolean).length;
-
-  if (intermediateSignals >= 3) {
-    return { level: 'intermediate', explanation: 'Issue involves building or integrating functionality — more than a small fix but manageable.', confidence: 'heuristic' };
-  }
-
-  // ── 4. Beginner heuristic signals ───────────────────────────────────
-  const beginnerSignals = [
-    /\b(typo|spelling|grammar|comment|rename|missing|broken link|lint|format)\b/i.test(combined),
-    /\b(fix|update|correct|remove|add \w+ to)\b/i.test(titleStr),
-    /\b(documentation|readme|contributing|changelog|doc[s]?)\b/i.test(combined),
-    (bodyStr.length < 250 && titleStr.length < 80),
-    detectReferencedFiles(issue.body).length === 1,
-  ].filter(Boolean).length;
-
-  if (beginnerSignals >= 2) {
-    return { level: 'beginner', explanation: 'Small, well-scoped change (typo, docs, minor fix) — good for first contributions.', confidence: 'heuristic' };
-  }
-
-  // ── 5. Not enough signal ─────────────────────────────────────────────
-  return { level: 'unknown', explanation: 'Not enough evidence in labels or description to estimate difficulty reliably.', confidence: 'low' };
+  return {
+    level,
+    explanation,
+    confidence,
+    signals: signals.slice(0, 6),   // cap at 6 most relevant
+    uncertainty,
+    referencedFiles: referencedFiles.length,
+    bodyLength,
+  };
 }
 
 const memoryQueryCache = new Map();
@@ -455,7 +586,7 @@ async function rankWithOllama(issues, skills) {
   const candidates = issues.slice(0, 20).map(({ id, title, repository, url, labels, body, updatedAt }) => ({
     id, title, repository, url, labels, body: body.slice(0, 850), updatedAt,
   }));
-  const prompt = `You help a beginner choose an open-source issue. Rank the supplied issues for the person's skills. Use only evidence in the issue data. Do not claim an issue is easy unless its text or labels support that. Return ONLY a JSON array, with one object for each selected issue: {"id": number, "score": number from 0 to 100, "matchedSkills": [string], "reason": "one short evidence-based sentence", "firstStep": "one concrete first action"}. Return at most 8 objects, ordered best fit first. Skills: ${skills.join(', ')}. Issues: ${JSON.stringify(candidates)}`;
+  const prompt = `You help a developer choose an open-source starter issue. Rank the supplied issues for the person's skills and evaluate difficulty level (Beginner, Intermediate, Advanced, or Unknown). Use only evidence in the issue data. Do not classify an issue as Beginner solely because it has 'good first issue' if its scope involves architectural changes, security, or many files. Return ONLY a JSON array, with one object for each selected issue: {"id": number, "score": number from 0 to 100, "matchedSkills": [string], "difficulty": "Beginner" | "Intermediate" | "Advanced" | "Unknown", "difficultyReason": "short explanation of difficulty", "reason": "one short evidence-based sentence", "firstStep": "one concrete first action"}. Return at most 8 objects, ordered best fit first. Skills: ${skills.join(', ')}. Issues: ${JSON.stringify(candidates)}`;
   const response = await fetch(`${ollamaUrl}/api/generate`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -480,6 +611,28 @@ async function rankWithOllama(issues, skills) {
         original.labels.some((l) => matchSkillInText(l, s))
       );
       const evidence = extractEvidence(original, verifiedMatched);
+      const heuristicDiff = estimateDifficulty(original);
+
+      let difficulty = heuristicDiff;
+      if (item.difficulty && typeof item.difficulty === 'string') {
+        const aiLevel = item.difficulty.toLowerCase().trim();
+        if (['beginner', 'intermediate', 'advanced', 'unknown'].includes(aiLevel)) {
+          const aiReason = (typeof item.difficultyReason === 'string' && item.difficultyReason.trim())
+            ? item.difficultyReason.trim()
+            : heuristicDiff.explanation;
+          difficulty = {
+            ...heuristicDiff,
+            level: aiLevel,
+            explanation: aiReason + ' (Refined with local AI model)',
+            confidence: heuristicDiff.confidence === 'low' ? 'heuristic' : heuristicDiff.confidence,
+            signals: [
+              { factor: `AI model evaluated task scope: ${aiLevel}`, found: true, weight: 'high' },
+              ...heuristicDiff.signals,
+            ].slice(0, 6),
+          };
+        }
+      }
+
       return {
         ...original,
         score: Math.max(0, Math.min(100, Number(item.score) || 0)),
@@ -487,7 +640,7 @@ async function rankWithOllama(issues, skills) {
         reason: String(item.reason || 'The model found a possible skill match.'),
         firstStep: String(item.firstStep || 'Read the issue and repository contribution guide.'),
         evidence,
-        difficulty: estimateDifficulty(original),
+        difficulty,
       };
     });
   if (!ranked.length) throw new Error('The local model did not match any issue IDs.');

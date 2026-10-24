@@ -1057,26 +1057,169 @@ footer {
   border: 1px solid rgba(255,255,255,0.1);
 }
 
-/* ── Difficulty Explanation Line ────────────────────── */
+/* ── Difficulty Card Section ────────────────────────── */
+.diff-card-block {
+  margin: 10px 0 12px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  transition: border-color 0.2s ease;
+}
+.diff-card-block:hover {
+  border-color: rgba(255, 255, 255, 0.12);
+}
+.diff-block--beginner {
+  border-left: 3px solid #4ade80;
+}
+.diff-block--intermediate {
+  border-left: 3px solid #facc15;
+}
+.diff-block--advanced {
+  border-left: 3px solid #f87171;
+}
+.diff-block--unknown {
+  border-left: 3px solid rgba(255, 255, 255, 0.2);
+}
+
+.diff-confidence-icon {
+  margin-right: 4px;
+  font-weight: 700;
+  opacity: 0.85;
+}
+
 .diff-explanation {
   font-family: var(--font-mono);
   font-size: 11px;
   color: var(--color-text-muted);
-  margin: 4px 0 6px;
   display: flex;
-  align-items: center;
-  gap: 5px;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
   line-height: 1.45;
+  flex-wrap: wrap;
 }
 .diff-explanation .icon-svg {
   stroke: var(--color-text-muted);
   fill: none;
   stroke-width: 2;
   flex-shrink: 0;
+  margin-top: 1px;
+  width: 14px;
+  height: 14px;
 }
-.diff-explanation em {
-  font-style: italic;
-  opacity: 0.7;
+.diff-reason-text {
+  flex: 1;
+  min-width: 200px;
+}
+.diff-header-tags {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.diff-files-pill {
+  font-size: 10px;
+  padding: 1px 7px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: var(--color-text-muted);
+}
+.diff-conf-badge {
+  font-size: 10px;
+  padding: 1px 8px;
+  border-radius: 4px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.diff-conf-badge.conf-high {
+  background: rgba(74, 222, 128, 0.12);
+  color: #4ade80;
+  border: 1px solid rgba(74, 222, 128, 0.25);
+}
+.diff-conf-badge.conf-medium {
+  background: rgba(250, 204, 21, 0.1);
+  color: #facc15;
+  border: 1px solid rgba(250, 204, 21, 0.2);
+}
+.diff-conf-badge.conf-low {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--color-text-muted);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Detected signals */
+.diff-signals {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+.diff-signals-heading {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-text-muted);
+  opacity: 0.8;
+}
+.diff-signals-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.diff-signal-chip {
+  font-size: 10px;
+  padding: 2px 7px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.75);
+  line-height: 1.3;
+}
+.diff-signal-chip.weight-high {
+  border-color: rgba(248, 113, 113, 0.25);
+  background: rgba(248, 113, 113, 0.06);
+  color: #fca5a5;
+}
+.diff-signal-chip.weight-medium {
+  border-color: rgba(250, 204, 21, 0.2);
+  background: rgba(250, 204, 21, 0.05);
+  color: #fef08a;
+}
+.diff-signal-chip.weight-low {
+  border-color: rgba(74, 222, 128, 0.2);
+  background: rgba(74, 222, 128, 0.05);
+  color: #86efac;
+}
+
+/* Uncertainty warnings */
+.diff-uncertainty {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: #facc15;
+  background: rgba(250, 204, 21, 0.06);
+  border: 1px solid rgba(250, 204, 21, 0.15);
+  padding: 6px 10px;
+  border-radius: 6px;
+  line-height: 1.4;
+}
+.diff-uncertainty-icon {
+  flex-shrink: 0;
+  font-size: 12px;
+}
+.diff-uncertainty-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
 /* ── Difficulty Filter Empty State ──────────────────── */

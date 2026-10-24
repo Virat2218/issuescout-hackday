@@ -93,18 +93,85 @@ function showNotice(message = '', kind = '') {
 
 /**
  * Render a difficulty badge for an issue card.
- * @param {object} difficulty  { level, explanation, confidence }
+ * @param {object} difficulty  { level, explanation, confidence, signals, uncertainty }
  */
 function renderDifficultyBadge(difficulty) {
   if (!difficulty) return '';
   const { level = 'unknown', explanation = '', confidence = 'low' } = difficulty;
-  const confidenceNote = confidence === 'label'
-    ? 'Confirmed by issue labels.'
-    : confidence === 'heuristic'
-      ? 'Estimated — verify before relying on this.'
-      : 'Insufficient evidence — estimate may be inaccurate.';
+  const confNormalized = (confidence || '').toLowerCase();
+  const confidenceIcon = (confNormalized === 'label' || confNormalized === 'high') ? '✓' : (confNormalized === 'heuristic' || confNormalized === 'medium') ? '≈' : '?';
+  const confidenceNote = (confNormalized === 'label' || confNormalized === 'high')
+    ? 'High confidence (verified with issue labels).'
+    : (confNormalized === 'heuristic' || confNormalized === 'medium')
+      ? 'Medium confidence (heuristic estimate from issue description & scope).'
+      : 'Low confidence (insufficient context — verify on GitHub).';
   const label = level.charAt(0).toUpperCase() + level.slice(1);
-  return `<span class="diff-badge diff-badge--${level}" title="${escapeHtml(explanation + ' ' + confidenceNote)}" aria-label="Difficulty: ${label}">${label}</span>`;
+  return `<span class="diff-badge diff-badge--${level}" title="${escapeHtml(explanation + ' ' + confidenceNote)}" aria-label="Difficulty: ${label} (${confidenceNote})"><span class="diff-confidence-icon">${confidenceIcon}</span>${label}</span>`;
+}
+
+/**
+ * Render structured difficulty section on issue cards:
+ * explanation, detected signals / evidence, and uncertainty notes.
+ */
+function renderDifficultyBlock(difficulty) {
+  if (!difficulty) return '';
+  const {
+    level = 'unknown',
+    explanation = '',
+    confidence = 'low',
+    signals = [],
+    uncertainty = [],
+    referencedFiles = 0,
+  } = difficulty;
+
+  const confNormalized = (confidence || '').toLowerCase();
+  const confLabel = (confNormalized === 'label' || confNormalized === 'high')
+    ? 'High'
+    : (confNormalized === 'heuristic' || confNormalized === 'medium')
+      ? 'Medium'
+      : 'Low';
+  const confClass = confLabel.toLowerCase();
+
+  const signalsList = Array.isArray(signals) && signals.length > 0
+    ? `<div class="diff-signals">
+        <span class="diff-signals-heading">Detected signals:</span>
+        <div class="diff-signals-chips">
+          ${signals.map((s) => {
+            const factor = typeof s === 'string' ? s : (s.factor || '');
+            const weight = typeof s === 'object' && s.weight ? s.weight : 'medium';
+            return `<span class="diff-signal-chip weight-${escapeHtml(weight)}">${escapeHtml(factor)}</span>`;
+          }).join('')}
+        </div>
+      </div>`
+    : '';
+
+  const uncertaintyList = Array.isArray(uncertainty) && uncertainty.length > 0
+    ? `<div class="diff-uncertainty">
+        <span class="diff-uncertainty-icon">⚠</span>
+        <div class="diff-uncertainty-text">
+          ${uncertainty.map((u) => `<span>${escapeHtml(u)}</span>`).join(' ')}
+        </div>
+      </div>`
+    : '';
+
+  const filesTag = referencedFiles > 0
+    ? `<span class="diff-files-pill">${referencedFiles} referenced file${referencedFiles === 1 ? '' : 's'}</span>`
+    : '';
+
+  return `
+    <div class="diff-card-block diff-block--${level}">
+      <div class="diff-explanation">
+        <svg class="icon-svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+        <span class="diff-reason-text">${escapeHtml(explanation)}</span>
+        <div class="diff-header-tags">
+          ${filesTag}
+          <span class="diff-conf-badge conf-${confClass}" title="Confidence level">${confLabel} confidence</span>
+        </div>
+      </div>
+      ${signalsList}
+      ${uncertaintyList}
+    </div>
+  `;
 }
 
 /**
@@ -213,12 +280,7 @@ function renderIssueCards(issues) {
     const repoUrl = 'https://github.com/' + escapeHtml(issue.repository);
     const contributingUrl = repoUrl + '/blob/HEAD/CONTRIBUTING.md';
 
-    const diffExplanation = issue.difficulty
-      ? '<p class="diff-explanation"><svg class="icon-svg" style="width:10px;height:10px" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg> '
-        + escapeHtml(issue.difficulty.explanation)
-        + (issue.difficulty.confidence !== 'label' ? ' <em>(estimated)</em>' : '')
-        + '</p>'
-      : '';
+    const diffBlock = renderDifficultyBlock(issue.difficulty);
 
     return [
       '<article class="issue-card">',
@@ -227,7 +289,7 @@ function renderIssueCards(issues) {
       '<p class="issue-reason">' + escapeHtml(issue.reason) + '</p>',
       '<div class="issue-evidence"><strong>Evidence from issue</strong>' + (evidence.length ? '<ul>' + evidence.map((item) => '<li><span class="evidence-source">' + escapeHtml(item.source) + '</span>' + (item.skill ? ' <span class="evidence-skill">[' + escapeHtml(item.skill) + ']</span>' : '') + ': "' + formatEvidenceQuote(item.quote, item.skill) + '"</li>').join('') + '</ul>' : '<p class="no-evidence">No exact skill phrase found in the issue text. Review it before relying on this match.</p>') + '</div>',
       '<div class="tags">' + tags + '</div>',
-      diffExplanation,
+      diffBlock,
       '<div class="issue-bottom"><span class="first-step"><b>First step</b> · ' + escapeHtml(issue.firstStep) + '</span><div class="issue-actions"><button class="pick-button' + (picked ? ' picked' : '') + '" type="button" data-issue-id="' + issueId + '" aria-pressed="' + picked + '">' + pickButtonContent + '</button><a class="guide-link" href="' + contributingUrl + '" target="_blank" rel="noopener noreferrer" title="View repository contribution guidelines"><svg class="icon-svg" viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg> <span>Guide</span></a><a class="open-link" href="' + escapeHtml(issue.url) + '" target="_blank" rel="noopener noreferrer"><span>View issue</span> <svg class="icon-svg" viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg></a></div></div>',
       '<p class="' + freshnessClass + '"><span>' + escapeHtml(freshness.label) + '</span> · ' + freshnessNote + '</p>',
       '</article>',
@@ -252,11 +314,13 @@ function generateContributionPlanMarkdown() {
     const contributingUrl = `https://github.com/${repo}/blob/HEAD/CONTRIBUTING.md`;
     const skills = (item.matchedSkills || []).join(', ') || 'Starter';
     const step = item.firstStep || 'Review the issue and repository contribution guide.';
-    const score = Number.isFinite(Number(item.score)) ? `${Math.round(item.score)}% fit` : 'Starter Match';
+    const diffLevel = item.difficulty?.level ? (item.difficulty.level.charAt(0).toUpperCase() + item.difficulty.level.slice(1)) : 'Unknown';
+    const diffExplanation = item.difficulty?.explanation || 'Difficulty not determined.';
 
     md += `### ${idx + 1}. [${repo}] ${title}\n\n`;
     md += `- **Issue Link**: [View on GitHub](${url})\n`;
     md += `- **Contribution Guide**: [Read CONTRIBUTING.md](${contributingUrl})\n`;
+    md += `- **Difficulty**: ${diffLevel} — ${diffExplanation}\n`;
     md += `- **Fit Score**: ${score}\n`;
     md += `- **Matched Skills**: ${skills}\n`;
     md += `- **First Concrete Step**: ${step}\n\n`;
