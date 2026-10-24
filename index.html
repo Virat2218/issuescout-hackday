@@ -79,8 +79,21 @@
       <section class="results-section" aria-live="polite">
         <div class="results-header">
           <div>
-            <div class="step-label">02 / YOUR SHORTLIST</div>
-            <h2 id="results-heading">Good issues to start with</h2>
+            <div class="step-label">02 / DISCOVER & PROGRESS</div>
+            <div class="view-switch-row">
+              <h2 id="results-heading">Good issues to start with</h2>
+              <div class="view-tabs" role="tablist" aria-label="Contribution view switcher">
+                <button id="view-tab-shortlist" class="view-tab active" role="tab" aria-selected="true" type="button">
+                  <svg class="icon-svg" viewBox="0 0 24 24"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+                  <span>Shortlist</span>
+                </button>
+                <button id="view-tab-learning" class="view-tab" role="tab" aria-selected="false" type="button">
+                  <svg class="icon-svg" viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+                  <span>Learning Path</span>
+                  <span class="learning-pill-indicator" id="learning-stage-indicator">Stage 1</span>
+                </button>
+              </div>
+            </div>
           </div>
           <div class="results-meta">
             <button id="export-plan" class="export-plan-button" type="button" hidden>
@@ -94,7 +107,54 @@
             <span class="result-count" id="result-count">—</span>
           </div>
         </div>
-        <p class="pick-privacy">Your picks stay in this browser and help move similar issues higher next time.</p>
+        <p class="pick-privacy" id="pick-privacy-note">Your picks stay in this browser and help move similar issues higher next time.</p>
+
+        <!-- Personalized Learning Path Dashboard (active in learning view) -->
+        <div class="learning-path-panel" id="learning-path-panel" hidden>
+          <div class="learning-path-header">
+            <div class="learning-path-titles">
+              <span class="learning-eyebrow">PROGRESSIVE CONTRIBUTION ROADMAP</span>
+              <h3>Personalized Learning Path</h3>
+              <p class="learning-desc">Advance through three progressive contribution stages based on your current skills, goals, and demonstrated PR progress.</p>
+            </div>
+            <div class="learning-goal-control">
+              <label for="learning-goal-select">My Target Goal:</label>
+              <select id="learning-goal-select" class="learning-goal-dropdown">
+                <option value="first-pr">🎯 Stage 1: Make my 1st Pull Request</option>
+                <option value="logic-tests">🚀 Stage 2: Feature Logic & Testing</option>
+                <option value="architecture">⚡ Stage 3: Architecture & System Impact</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Stage Navigation Pills (Beginner / Intermediate / Advanced) -->
+          <div class="learning-stages-bar" role="tablist" aria-label="Learning stages">
+            <button class="stage-btn active" data-stage="beginner" type="button" role="tab" aria-selected="true">
+              <span class="stage-number">01</span>
+              <div class="stage-info">
+                <span class="stage-name">Beginner Stage</span>
+                <span class="stage-sub">First PRs · Small Scopes</span>
+              </div>
+            </button>
+            <button class="stage-btn" data-stage="intermediate" type="button" role="tab" aria-selected="false">
+              <span class="stage-number">02</span>
+              <div class="stage-info">
+                <span class="stage-name">Intermediate Stage</span>
+                <span class="stage-sub">Feature Logic · Unit Tests</span>
+              </div>
+            </button>
+            <button class="stage-btn" data-stage="advanced" type="button" role="tab" aria-selected="false">
+              <span class="stage-number">03</span>
+              <div class="stage-info">
+                <span class="stage-name">Advanced Stage</span>
+                <span class="stage-sub">Refactoring · Architecture</span>
+              </div>
+            </button>
+          </div>
+
+          <!-- Progress signals banner without false mastery claims -->
+          <div class="learning-progress-banner" id="learning-progress-banner"></div>
+        </div>
         <!-- Difficulty filter bar -->
         <div class="difficulty-filter" id="difficulty-filter" hidden>
           <span class="filter-label" id="diff-filter-label">Difficulty Level:</span>

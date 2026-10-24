@@ -13,10 +13,48 @@ const difficultyFilterBar = document.querySelector('#difficulty-filter');
 const diffCountLabel = document.querySelector('#diff-count');
 const diffResetButton = document.querySelector('#diff-reset');
 const diffPillsContainer = document.querySelector('.difficulty-pills');
+const viewTabShortlist = document.querySelector('#view-tab-shortlist');
+const viewTabLearning = document.querySelector('#view-tab-learning');
+const learningPathPanel = document.querySelector('#learning-path-panel');
+const learningStageIndicator = document.querySelector('#learning-stage-indicator');
+const learningGoalSelect = document.querySelector('#learning-goal-select');
+const learningProgressBanner = document.querySelector('#learning-progress-banner');
+const pickPrivacyNote = document.querySelector('#pick-privacy-note');
+
 const PICK_STORAGE_KEY = 'issuescout:chosen-issues:v1';
+const LEARNING_STORAGE_KEY = 'issuescout:learning-path:v1';
+
 let chosenIssues = loadChosenIssues();
+let learningProfile = loadLearningProfile();
 let currentIssues = [];
 let activeDifficultyFilter = 'all'; // 'all' | 'beginner' | 'intermediate' | 'advanced'
+let activeViewMode = 'shortlist'; // 'shortlist' | 'learning'
+
+function loadLearningProfile() {
+  try {
+    const stored = JSON.parse(localStorage.getItem(LEARNING_STORAGE_KEY) || '{}');
+    if (stored && typeof stored === 'object') {
+      return {
+        targetStage: stored.targetStage || 'beginner',
+        userGoal: stored.userGoal || 'first-pr',
+        completedContributions: stored.completedContributions || {},
+        inProgressContributions: stored.inProgressContributions || {},
+      };
+    }
+  } catch { /* ignore */ }
+  return {
+    targetStage: 'beginner',
+    userGoal: 'first-pr',
+    completedContributions: {},
+    inProgressContributions: {},
+  };
+}
+
+function saveLearningProfile() {
+  try {
+    localStorage.setItem(LEARNING_STORAGE_KEY, JSON.stringify(learningProfile));
+  } catch { /* ignore */ }
+}
 
 function updatePickButtons() {
   const pickCount = Object.keys(chosenIssues).length;
@@ -333,8 +371,10 @@ function formatEvidenceQuote(quote, skill) {
 }
 
 function renderIssues(issues) {
-  // Show or hide difficulty filter bar
-  if (difficultyFilterBar) difficultyFilterBar.hidden = issues.length === 0;
+  // Show or hide difficulty filter bar (only visible in shortlist view)
+  if (difficultyFilterBar) {
+    difficultyFilterBar.hidden = (activeViewMode !== 'shortlist') || (issues.length === 0);
+  }
 
   const sorted = issues
     .map((issue, index) => ({ ...issue, pickMatchScore: getPickMatchScore(issue), originalIndex: index }))
@@ -349,8 +389,11 @@ function renderIssues(issues) {
     return;
   }
 
-  // Preserve active difficulty filter on new search results
-  applyDifficultyFilter();
+  if (activeViewMode === 'learning') {
+    renderLearningPathView();
+  } else {
+    applyDifficultyFilter();
+  }
   updatePickButtons();
 }
 
@@ -397,6 +440,308 @@ function renderIssueCards(issues) {
   updatePickButtons();
 }
 
+/**
+ * Identify practical skills a contributor may develop through an issue,
+ * grounded strictly in actual issue content, tools, and signals.
+ */
+function identifySkillsToDevelop(issue) {
+  const combined = `${issue.title || ''} ${issue.body || ''} ${(issue.labels || []).join(' ')}`.toLowerCase();
+  const skills = new Set();
+
+  if (issue.difficulty?.level === 'beginner') {
+    skills.add('Git branch & Pull Request workflow');
+    skills.add('CONTRIBUTING guide etiquette');
+  }
+
+  if (/\b(react|jsx|tsx|hooks?|component)\b/i.test(combined)) {
+    skills.add('React component lifecycle & props');
+  }
+  if (/\b(typescript|ts|types?|interface)\b/i.test(combined)) {
+    skills.add('TypeScript type definitions');
+  }
+  if (/\b(python|django|flask|pytest)\b/i.test(combined)) {
+    skills.add('Python environment & testing');
+  }
+  if (/\b(css|html|ui|style|tailwind|contrast|wcag|responsive)\b/i.test(combined)) {
+    skills.add('Accessible UI & CSS styling');
+  }
+  if (/\b(test|jest|unit test|integration|cypress|e2e|coverage|pytest)\b/i.test(combined)) {
+    skills.add('Test suite verification & assertions');
+  }
+  if (/\b(api|route|endpoint|json|backend|express|rest)\b/i.test(combined)) {
+    skills.add('API endpoints & request validation');
+  }
+  if (/\b(docs?|documentation|readme|typo|markdown)\b/i.test(combined)) {
+    skills.add('Technical documentation clarity');
+  }
+  if (/\b(refactor|redesign|architecture|performance|optimize)\b/i.test(combined)) {
+    skills.add('Code modularity & optimization');
+  }
+  if (/\b(debug|root cause|fix|crash|error|bug)\b/i.test(combined)) {
+    skills.add('Root-cause debugging & reproduction');
+  }
+
+  (issue.matchedSkills || []).slice(0, 2).forEach((s) => {
+    skills.add(`${s} practical usage`);
+  });
+
+  return Array.from(skills).slice(0, 4);
+}
+
+/**
+ * Explain why an issue is suitable for the user's current learning stage.
+ */
+function getStageSuitability(issue, stage) {
+  const diffLevel = getIssueDifficultyLevel(issue);
+  if (stage === 'beginner') {
+    if (diffLevel === 'beginner') {
+      return 'Ideal starter step: Self-contained scope with a straightforward verification path, perfect for mastering the PR submission process without codebase overwhelm.';
+    }
+    return 'Gentle introduction: Helps you explore the repository structure and toolchain before diving into deeper tasks.';
+  } else if (stage === 'intermediate') {
+    if (diffLevel === 'intermediate') {
+      return 'Core growth challenge: Requires investigating component behavior, tracing errors, and verifying changes with test assertions.';
+    } else if (diffLevel === 'beginner') {
+      return 'Quick confidence booster: Allows you to practice rapid reproduction and testing before taking on heavier logic changes.';
+    }
+    return 'Expands your problem-solving into multi-component interaction.';
+  } else {
+    // advanced
+    if (diffLevel === 'advanced') {
+      return 'High-impact milestone: Touches core subsystems, performance profiling, or multi-file architectural patterns requiring system design foresight.';
+    }
+    return 'Foundational deep-dive: Prepares you for major architectural contributions across this repository.';
+  }
+}
+
+/**
+ * Generate meaningful progress signals based on real contribution actions
+ * without falsely claiming skill mastery.
+ */
+function getLearningStageProgressSignals() {
+  const completed = Object.values(learningProfile.completedContributions || {});
+  const inProgress = Object.values(learningProfile.inProgressContributions || {});
+  const completedCount = completed.length;
+  const inProgressCount = inProgress.length;
+
+  const practicedSkills = new Set();
+  completed.forEach((c) => {
+    (c.skills || []).forEach((s) => practicedSkills.add(s));
+  });
+
+  let milestoneText = '';
+  let unlockRecommendation = '';
+
+  if (completedCount === 0) {
+    milestoneText = 'Welcome to your learning path! We recommend starting in Stage 1 (Beginner) to make your first PR comfortably.';
+    unlockRecommendation = 'Stage 1 active · Complete your first PR to unlock Stage 2 milestone recommendation.';
+  } else if (completedCount < 2) {
+    milestoneText = `Great milestone: ${completedCount} contribution completed! You've practiced open-source workflow and submission etiquette.`;
+    unlockRecommendation = 'Stage 1 progress verified. You can continue building confidence in Stage 1 or challenge yourself in Stage 2.';
+  } else if (completedCount < 4) {
+    milestoneText = `Strong progress signal: ${completedCount} contributions completed with practical experience in ${Array.from(practicedSkills).slice(0, 3).join(', ') || 'starter workflows'}.`;
+    unlockRecommendation = 'Stage 2 (Intermediate) strongly recommended: Ready for component logic, debugging, and testing.';
+  } else {
+    milestoneText = `Advanced progress signal: ${completedCount} contributions completed across repositories. Demonstrated consistent PR follow-through.`;
+    unlockRecommendation = 'Stage 3 (Advanced) unlocked: Ready for architecture, refactoring, and multi-file contributions.';
+  }
+
+  return {
+    completedCount,
+    inProgressCount,
+    practicedSkillsCount: practicedSkills.size,
+    practicedSkillsList: Array.from(practicedSkills).slice(0, 4),
+    milestoneText,
+    unlockRecommendation,
+  };
+}
+
+/**
+ * Render the Personalized Learning Path view.
+ */
+function renderLearningPathView() {
+  const stage = learningProfile.targetStage || 'beginner';
+  const stageTitle = stage.charAt(0).toUpperCase() + stage.slice(1);
+
+  // Update header stage indicator
+  if (learningStageIndicator) {
+    learningStageIndicator.textContent = `Stage: ${stageTitle}`;
+    learningStageIndicator.className = `learning-pill-indicator stage-${stage}`;
+  }
+
+  // Update stage navigation buttons
+  document.querySelectorAll('.stage-btn').forEach((btn) => {
+    const isCurrent = btn.dataset.stage === stage;
+    btn.classList.toggle('active', isCurrent);
+    btn.setAttribute('aria-selected', isCurrent ? 'true' : 'false');
+  });
+
+  // Update goal select
+  if (learningGoalSelect) {
+    learningGoalSelect.value = learningProfile.userGoal || 'first-pr';
+  }
+
+  // Render progress signals banner
+  const signals = getLearningStageProgressSignals();
+  if (learningProgressBanner) {
+    const practicedText = signals.practicedSkillsCount > 0
+      ? `<div class="progress-skills-note"><span>Practiced in completed tasks:</span> ${signals.practicedSkillsList.map(s => `<span class="practiced-skill-chip">${escapeHtml(s)}</span>`).join('')} <span class="no-mastery-disclaimer">(practice ongoing · not certified mastery)</span></div>`
+      : '';
+
+    learningProgressBanner.innerHTML = `
+      <div class="progress-stats-row">
+        <div class="stat-badge"><span class="stat-num">${signals.completedCount}</span> <span class="stat-label">PRs Completed</span></div>
+        <div class="stat-badge"><span class="stat-num">${signals.inProgressCount}</span> <span class="stat-label">In Progress</span></div>
+        <div class="stat-badge"><span class="stat-num">${signals.practicedSkillsCount}</span> <span class="stat-label">Skills Practiced</span></div>
+        <div class="stage-status-box"><span class="current-stage-tag stage-${stage}">Active: Stage ${stage === 'beginner' ? '1' : stage === 'intermediate' ? '2' : '3'} (${stageTitle})</span></div>
+      </div>
+      <div class="progress-message-row">
+        <svg class="icon-svg" viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+        <div>
+          <strong>${escapeHtml(signals.milestoneText)}</strong>
+          <p>${escapeHtml(signals.unlockRecommendation)}</p>
+        </div>
+      </div>
+      ${practicedText}
+    `;
+  }
+
+  // Filter issues suitable for this stage
+  const stageIssues = currentIssues.filter((issue) => {
+    const level = getIssueDifficultyLevel(issue);
+    if (stage === 'beginner') return level === 'beginner' || level === 'unknown';
+    if (stage === 'intermediate') return level === 'intermediate';
+    if (stage === 'advanced') return level === 'advanced';
+    return true;
+  });
+
+  if (!stageIssues.length && currentIssues.length > 0) {
+    results.innerHTML = `
+      <div class="empty-state">
+        <div class="empty-icon">⌕</div>
+        <strong>No ${stageTitle} stage issues in this search shortlist.</strong>
+        <span>Try switching to another stage above or enter broader skills to discover more issues.</span>
+        <div class="empty-stage-actions">
+          <button class="stage-nav-btn" type="button" onclick="setLearningStage('beginner')">Explore Stage 1 (Beginner)</button>
+          <button class="stage-nav-btn" type="button" onclick="setLearningStage('intermediate')">Explore Stage 2 (Intermediate)</button>
+          <button class="stage-nav-btn" type="button" onclick="setLearningStage('advanced')">Explore Stage 3 (Advanced)</button>
+        </div>
+      </div>
+    `;
+    count.textContent = '0 IN STAGE';
+    return;
+  }
+
+  if (!currentIssues.length) {
+    results.innerHTML = `
+      <div class="empty-state">
+        <div class="empty-icon">↗</div>
+        <strong>Ready to start your personalized learning journey?</strong>
+        <span>Enter your skills above (e.g. JavaScript, React, Python) to generate tailored recommendations for each stage.</span>
+      </div>
+    `;
+    count.textContent = 'ROADMAP READY';
+    return;
+  }
+
+  count.textContent = `${stageIssues.length} IN ${stageTitle.toUpperCase()} STAGE`;
+  renderLearningPathCards(stageIssues, stage);
+}
+
+/**
+ * Render issues formatted for the Personalized Learning Path.
+ */
+function renderLearningPathCards(issues, stage) {
+  results.innerHTML = issues.map((issue) => {
+    const issueId = escapeHtml(issue.id || '');
+    const score = Number.isFinite(Number(issue.score)) ? Math.round(issue.score) + '% FIT' : 'MATCH';
+    const freshness = formatIssueFreshness(issue.updatedAt);
+    const difficultyBadge = renderDifficultyBadge(issue.difficulty);
+    const repoUrl = 'https://github.com/' + escapeHtml(issue.repository);
+    const contributingUrl = repoUrl + '/blob/HEAD/CONTRIBUTING.md';
+    const skillsToDevelop = identifySkillsToDevelop(issue);
+    const stageSuitability = getStageSuitability(issue, stage);
+
+    const isInProgress = Boolean(learningProfile.inProgressContributions[issue.id]);
+    const isCompleted = Boolean(learningProfile.completedContributions[issue.id]);
+    const isPicked = Boolean(chosenIssues[issue.id]);
+
+    const progressBtnClass = isInProgress ? 'learning-action-btn in-progress' : 'learning-action-btn';
+    const progressBtnText = isInProgress
+      ? '<svg class="icon-svg" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg> <span>In Progress</span>'
+      : '<svg class="icon-svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> <span>Work on this</span>';
+
+    const completeBtnClass = isCompleted ? 'learning-action-btn completed' : 'learning-action-btn';
+    const completeBtnText = isCompleted
+      ? '<svg class="icon-svg" viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg> <span>PR Completed</span>'
+      : '<svg class="icon-svg" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg> <span>Mark PR Done</span>';
+
+    const pickButtonContent = isPicked
+      ? '<svg class="icon-svg" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg> <span>In picks</span>'
+      : '<svg class="icon-svg" viewBox="0 0 24 24"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg> <span>Save</span>';
+
+    const stageNum = stage === 'beginner' ? '1' : stage === 'intermediate' ? '2' : '3';
+    const stageName = stage.charAt(0).toUpperCase() + stage.slice(1);
+
+    return `
+      <article class="issue-card learning-card stage-card--${stage}">
+        <div class="issue-top">
+          <span class="repo">${escapeHtml(issue.repository)}</span>
+          <div class="issue-top-badges">
+            <span class="learning-stage-tag stage-${stage}">Stage ${stageNum} Recommendation</span>
+            <span class="score">${score}</span>
+            ${difficultyBadge}
+          </div>
+        </div>
+
+        <h3 class="issue-title"><a href="${escapeHtml(issue.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(issue.title)}</a></h3>
+
+        <div class="learning-suitability-box">
+          <div class="suitability-header">
+            <svg class="icon-svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+            <strong>Why suitable for Stage ${stageNum} (${stageName}):</strong>
+          </div>
+          <p class="suitability-text">${escapeHtml(stageSuitability)}</p>
+        </div>
+
+        <div class="learning-skills-develop">
+          <span class="skills-develop-label">Skills you may practice:</span>
+          <div class="skills-develop-chips">
+            ${skillsToDevelop.map((s) => `<span class="skill-dev-chip"><span class="chip-plus">+</span>${escapeHtml(s)}</span>`).join('')}
+          </div>
+        </div>
+
+        <div class="issue-bottom">
+          <span class="first-step"><b>Next concrete action</b> · ${escapeHtml(issue.firstStep)}</span>
+          <div class="learning-actions-row">
+            <button class="pick-button${isPicked ? ' picked' : ''}" type="button" data-issue-id="${issueId}" aria-pressed="${isPicked}">
+              ${pickButtonContent}
+            </button>
+            <button class="${progressBtnClass} learning-progress-btn" type="button" data-issue-id="${issueId}" aria-pressed="${isInProgress}">
+              ${progressBtnText}
+            </button>
+            <button class="${completeBtnClass} learning-complete-btn" type="button" data-issue-id="${issueId}" aria-pressed="${isCompleted}">
+              ${completeBtnText}
+            </button>
+            <a class="guide-link" href="${contributingUrl}" target="_blank" rel="noopener noreferrer" title="View repository contribution guidelines">
+              <svg class="icon-svg" viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+              <span>Guide</span>
+            </a>
+            <a class="open-link" href="${escapeHtml(issue.url)}" target="_blank" rel="noopener noreferrer">
+              <span>View issue</span>
+              <svg class="icon-svg" viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+            </a>
+          </div>
+        </div>
+
+        <p class="${freshness.stale ? 'issue-freshness stale' : 'issue-freshness'}">
+          <span>${escapeHtml(freshness.label)}</span> · ${freshness.stale ? 'May be stale. Recheck on GitHub before starting.' : 'Open when GitHub returned it.'}
+        </p>
+      </article>
+    `;
+  }).join('');
+}
+
 
 function generateContributionPlanMarkdown() {
   const picks = Object.values(chosenIssues);
@@ -404,6 +749,19 @@ function generateContributionPlanMarkdown() {
   const dateStr = new Date().toISOString().slice(0, 10);
   let md = `# My Open-Source Starter Plan\n\n`;
   md += `*Generated with [IssueScout](http://localhost:4173) on ${dateStr}*\n\n`;
+
+  const stage = learningProfile.targetStage || 'beginner';
+  const stageTitle = stage.charAt(0).toUpperCase() + stage.slice(1);
+  const signals = getLearningStageProgressSignals();
+  md += `## Learning Path Status\n\n`;
+  md += `- **Active Learning Stage**: Stage ${stage === 'beginner' ? '1' : stage === 'intermediate' ? '2' : '3'} (${stageTitle})\n`;
+  md += `- **Target Goal**: ${learningProfile.userGoal || 'first-pr'}\n`;
+  md += `- **Demonstrated Progress**: ${signals.completedCount} PRs completed · ${signals.inProgressCount} in progress · ${signals.practicedSkillsCount} skills practiced\n`;
+  if (signals.practicedSkillsList.length > 0) {
+    md += `- **Practiced Skills (Ongoing Practice)**: ${signals.practicedSkillsList.join(', ')}\n`;
+  }
+  md += `\n`;
+
   md += `## Selected Starter Issues (${picks.length})\n\n`;
 
   picks.forEach((item, idx) => {
@@ -415,12 +773,13 @@ function generateContributionPlanMarkdown() {
     const step = item.firstStep || 'Review the issue and repository contribution guide.';
     const diffLevel = item.difficulty?.level ? (item.difficulty.level.charAt(0).toUpperCase() + item.difficulty.level.slice(1)) : 'Unknown';
     const diffExplanation = item.difficulty?.explanation || 'Difficulty not determined.';
+    const scoreText = Number.isFinite(Number(item.score)) ? Math.round(item.score) + '% fit' : 'Match';
 
     md += `### ${idx + 1}. [${repo}] ${title}\n\n`;
     md += `- **Issue Link**: [View on GitHub](${url})\n`;
     md += `- **Contribution Guide**: [Read CONTRIBUTING.md](${contributingUrl})\n`;
     md += `- **Difficulty**: ${diffLevel} — ${diffExplanation}\n`;
-    md += `- **Fit Score**: ${score}\n`;
+    md += `- **Fit Score**: ${scoreText}\n`;
     md += `- **Matched Skills**: ${skills}\n`;
     md += `- **First Concrete Step**: ${step}\n\n`;
     md += `**Action Checklist**:\n`;
@@ -432,36 +791,90 @@ function generateContributionPlanMarkdown() {
     md += `---\n\n`;
   });
 
-  md += `*Good luck with your first open-source contribution!*\n`;
+  md += `*Good luck with your open-source journey!*\n`;
   return md;
 }
 
 results.addEventListener('click', (event) => {
+  // 1. Pick button
   const pickButton = event.target.closest('.pick-button');
-  if (!pickButton) return;
-  const issue = currentIssues.find((item) => String(item.id) === pickButton.dataset.issueId);
-  if (!issue || !issue.id) return;
+  if (pickButton) {
+    const issue = currentIssues.find((item) => String(item.id) === pickButton.dataset.issueId);
+    if (!issue || !issue.id) return;
 
-  if (chosenIssues[issue.id]) {
-    delete chosenIssues[issue.id];
-    showNotice('Removed from your picks.');
-  } else {
-    chosenIssues[issue.id] = {
-      id: issue.id,
-      title: issue.title,
-      url: issue.url,
-      repository: issue.repository,
-      firstStep: issue.firstStep,
-      score: issue.score,
-      labels: (issue.labels || []).slice(0, 12),
-      matchedSkills: (issue.matchedSkills || []).slice(0, 12),
-      difficulty: issue.difficulty,
-    };
-    chosenIssues = Object.fromEntries(Object.entries(chosenIssues).slice(-50));
-    showNotice('Marked as a pick! Similar starter issues will move higher on later searches.');
+    if (chosenIssues[issue.id]) {
+      delete chosenIssues[issue.id];
+      showNotice('Removed from your picks.');
+    } else {
+      chosenIssues[issue.id] = {
+        id: issue.id,
+        title: issue.title,
+        url: issue.url,
+        repository: issue.repository,
+        firstStep: issue.firstStep,
+        score: issue.score,
+        labels: (issue.labels || []).slice(0, 12),
+        matchedSkills: (issue.matchedSkills || []).slice(0, 12),
+        difficulty: issue.difficulty,
+      };
+      chosenIssues = Object.fromEntries(Object.entries(chosenIssues).slice(-50));
+      showNotice('Marked as a pick! Similar starter issues will move higher on later searches.');
+    }
+    saveChosenIssues();
+    renderIssues(currentIssues);
+    return;
   }
-  saveChosenIssues();
-  renderIssues(currentIssues);
+
+  // 2. Learning Path: Work on this (in-progress)
+  const progressBtn = event.target.closest('.learning-progress-btn');
+  if (progressBtn) {
+    const issue = currentIssues.find((item) => String(item.id) === progressBtn.dataset.issueId);
+    if (!issue || !issue.id) return;
+
+    if (learningProfile.inProgressContributions[issue.id]) {
+      delete learningProfile.inProgressContributions[issue.id];
+      showNotice('Removed from in-progress tasks.');
+    } else {
+      learningProfile.inProgressContributions[issue.id] = {
+        id: issue.id,
+        title: issue.title,
+        repository: issue.repository,
+        difficulty: issue.difficulty?.level || 'unknown',
+        startedAt: new Date().toISOString(),
+        skills: identifySkillsToDevelop(issue),
+      };
+      showNotice('Marked as In Progress! Focus on your next concrete step.');
+    }
+    saveLearningProfile();
+    renderIssues(currentIssues);
+    return;
+  }
+
+  // 3. Learning Path: Mark PR Done (completed)
+  const completeBtn = event.target.closest('.learning-complete-btn');
+  if (completeBtn) {
+    const issue = currentIssues.find((item) => String(item.id) === completeBtn.dataset.issueId);
+    if (!issue || !issue.id) return;
+
+    if (learningProfile.completedContributions[issue.id]) {
+      delete learningProfile.completedContributions[issue.id];
+      showNotice('Removed completed PR milestone.');
+    } else {
+      delete learningProfile.inProgressContributions[issue.id];
+      learningProfile.completedContributions[issue.id] = {
+        id: issue.id,
+        title: issue.title,
+        repository: issue.repository,
+        difficulty: issue.difficulty?.level || 'unknown',
+        completedAt: new Date().toISOString(),
+        skills: identifySkillsToDevelop(issue),
+      };
+      showNotice('Congratulations on your completed PR milestone! Progress signals have updated.');
+    }
+    saveLearningProfile();
+    renderIssues(currentIssues);
+    return;
+  }
 });
 
 clearPicksButton?.addEventListener('click', () => {
@@ -615,6 +1028,78 @@ if (diffPillsContainer) {
 
 checkStatus();
 updatePickButtons();
+
+// View Mode Switching: Shortlist vs Personalized Learning Path
+function switchViewMode(mode) {
+  activeViewMode = mode;
+  const isLearning = mode === 'learning';
+
+  if (viewTabShortlist) {
+    viewTabShortlist.classList.toggle('active', !isLearning);
+    viewTabShortlist.setAttribute('aria-selected', !isLearning ? 'true' : 'false');
+  }
+  if (viewTabLearning) {
+    viewTabLearning.classList.toggle('active', isLearning);
+    viewTabLearning.setAttribute('aria-selected', isLearning ? 'true' : 'false');
+  }
+  if (learningPathPanel) {
+    learningPathPanel.hidden = !isLearning;
+  }
+  if (difficultyFilterBar) {
+    difficultyFilterBar.hidden = isLearning || (currentIssues.length === 0);
+  }
+  const resultsHeading = document.querySelector('#results-heading');
+  if (resultsHeading) {
+    resultsHeading.textContent = isLearning
+      ? 'Personalized Learning Path Recommendations'
+      : 'Good issues to start with';
+  }
+  if (pickPrivacyNote) {
+    pickPrivacyNote.textContent = isLearning
+      ? 'Track your real PR milestones and progressive skills without false mastery assumptions.'
+      : 'Your picks stay in this browser and help move similar issues higher next time.';
+  }
+  renderIssues(currentIssues);
+}
+
+viewTabShortlist?.addEventListener('click', () => switchViewMode('shortlist'));
+viewTabLearning?.addEventListener('click', () => switchViewMode('learning'));
+
+// Stage buttons click delegation
+document.querySelectorAll('.stage-btn').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    const stage = btn.dataset.stage;
+    if (stage) setLearningStage(stage);
+  });
+});
+
+window.setLearningStage = function (stage) {
+  if (!['beginner', 'intermediate', 'advanced'].includes(stage)) return;
+  learningProfile.targetStage = stage;
+  saveLearningProfile();
+  if (activeViewMode !== 'learning') {
+    switchViewMode('learning');
+  } else {
+    renderLearningPathView();
+  }
+  showNotice(`Switched to Stage ${stage === 'beginner' ? '1 (Beginner)' : stage === 'intermediate' ? '2 (Intermediate)' : '3 (Advanced)'}.`);
+};
+
+// Learning goal selector
+learningGoalSelect?.addEventListener('change', (event) => {
+  learningProfile.userGoal = event.target.value;
+  // Recommend matching stage based on user goal choice
+  if (event.target.value === 'first-pr') {
+    learningProfile.targetStage = 'beginner';
+  } else if (event.target.value === 'logic-tests') {
+    learningProfile.targetStage = 'intermediate';
+  } else if (event.target.value === 'architecture') {
+    learningProfile.targetStage = 'advanced';
+  }
+  saveLearningProfile();
+  renderLearningPathView();
+  showNotice('Updated target goal and aligned recommended learning stage.');
+});
 
 function getIssueEvidence(issue) {
   if (Array.isArray(issue.evidence) && issue.evidence.length > 0) {
