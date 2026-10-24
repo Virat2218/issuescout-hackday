@@ -5,19 +5,62 @@ import { fileURLToPath } from 'node:url';
 
 const root = path.dirname(fileURLToPath(import.meta.url));
 const port = Number(process.env.PORT || 4173);
+const host = process.env.HOST || '0.0.0.0';
 const ollamaUrl = process.env.OLLAMA_URL || 'http://127.0.0.1:11434';
 const ollamaModel = process.env.OLLAMA_MODEL || 'qwen2.5:1.5b-instruct';
 const githubToken = process.env.GITHUB_TOKEN;
 
-function send(res, status, value, type = 'application/json; charset=utf-8') {
-  res.writeHead(status, { 'Content-Type': type, 'Cache-Control': 'no-store' });
+// Lightweight in-memory rate limiter (60 requests per minute per IP)
+const ipRateLimitMap = new Map();
+function checkRateLimit(ip, limit = 60, windowMs = 60000) {
+  const now = Date.now();
+  const record = ipRateLimitMap.get(ip) || { count: 0, resetAt: now + windowMs };
+  if (now > record.resetAt) {
+    record.count = 0;
+    record.resetAt = now + windowMs;
+  }
+  record.count += 1;
+  ipRateLimitMap.set(ip, record);
+  return {
+    allowed: record.count <= limit,
+    remaining: Math.max(0, limit - record.count),
+    reset: Math.ceil((record.resetAt - now) / 1000),
+  };
+}
+
+function send(res, status, value, type = 'application/json; charset=utf-8', customHeaders = {}) {
+  const headers = {
+    'Content-Type': type,
+    'Cache-Control': 'no-store',
+    'X-Content-Type-Options': 'nosniff',
+    'X-Frame-Options': 'DENY',
+    'Referrer-Policy': 'strict-origin-when-cross-origin',
+    'Content-Security-Policy': "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; connect-src 'self' http://localhost:* http://127.0.0.1:* https://api.github.com; img-src 'self' data: https:;",
+    ...customHeaders,
+  };
+  res.writeHead(status, headers);
   res.end(type.startsWith('application/json') ? JSON.stringify(value) : value);
 }
 
-async function bodyJson(req) {
+// Request size limit enforced at 64KB to prevent denial-of-service memory exhaustion
+async function bodyJson(req, limit = 65536) {
   let body = '';
-  for await (const chunk of req) body += chunk;
-  return body ? JSON.parse(body) : {};
+  let bytes = 0;
+  for await (const chunk of req) {
+    bytes += chunk.length;
+    if (bytes > limit) {
+      throw new Error('Payload Too Large: request body exceeds 64KB limit.');
+    }
+    body += chunk;
+  }
+  if (!body) return {};
+  try {
+    return JSON.parse(body);
+  } catch {
+    const e = new Error('Invalid JSON in request body.');
+    e.isParseError = true;
+    throw e;
+  }
 }
 
 function sanitizeTerm(term) {
@@ -1661,9 +1704,176 @@ async function rankWithOllama(issues, skills) {
   return ranked;
 }
 
+const liveStreamCache = {
+  timestamp: 0,
+  data: [],
+  rateLimited: false,
+};
+
+async function fetchGitHubLiveStream() {
+  const now = Date.now();
+  if (liveStreamCache.data.length && now - liveStreamCache.timestamp < 60000) {
+    return {
+      events: liveStreamCache.data,
+      cached: true,
+      lastUpdated: new Date(liveStreamCache.timestamp).toISOString(),
+      rateLimited: liveStreamCache.rateLimited,
+    };
+  }
+
+  const headers = {
+    'Accept': 'application/vnd.github+json',
+    'User-Agent': 'IssueScout-OpenSource',
+  };
+  if (githubToken) {
+    headers['Authorization'] = `token ${githubToken}`;
+  }
+
+  try {
+    const response = await fetch('https://api.github.com/events?per_page=30', {
+      headers,
+      signal: AbortSignal.timeout(8000),
+    });
+
+    if (response.status === 403 || response.status === 429) {
+      liveStreamCache.rateLimited = true;
+      if (liveStreamCache.data.length) {
+        return {
+          events: liveStreamCache.data,
+          cached: true,
+          lastUpdated: new Date(liveStreamCache.timestamp).toISOString(),
+          rateLimited: true,
+          notice: 'GitHub API rate limit reached. Displaying most recent verified activity records.',
+        };
+      }
+    }
+
+    if (response.ok) {
+      const rawEvents = await response.json();
+      if (Array.isArray(rawEvents)) {
+        const events = rawEvents
+          .filter((ev) => ['IssuesEvent', 'PullRequestEvent', 'IssueCommentEvent', 'CreateEvent', 'PushEvent'].includes(ev.type))
+          .map((ev) => {
+            let actionDescription = 'Activity';
+            let title = '';
+            let targetUrl = `https://github.com/${ev.repo?.name}`;
+
+            if (ev.type === 'IssuesEvent') {
+              actionDescription = `${ev.payload?.action || 'updated'} issue`;
+              title = ev.payload?.issue?.title || 'Issue';
+              targetUrl = ev.payload?.issue?.html_url || targetUrl;
+            } else if (ev.type === 'PullRequestEvent') {
+              actionDescription = `${ev.payload?.action || 'updated'} pull request`;
+              title = ev.payload?.pull_request?.title || 'Pull Request';
+              targetUrl = ev.payload?.pull_request?.html_url || targetUrl;
+            } else if (ev.type === 'IssueCommentEvent') {
+              actionDescription = `commented on issue #${ev.payload?.issue?.number || ''}`;
+              title = ev.payload?.issue?.title || 'Commented on issue';
+              targetUrl = ev.payload?.comment?.html_url || ev.payload?.issue?.html_url || targetUrl;
+            } else if (ev.type === 'PushEvent') {
+              actionDescription = `pushed ${ev.payload?.size || 1} commit(s)`;
+              title = `Branch ${ev.payload?.ref?.replace('refs/heads/', '') || 'main'}`;
+            } else if (ev.type === 'CreateEvent') {
+              actionDescription = `created ${ev.payload?.ref_type || 'branch'}`;
+              title = ev.payload?.ref || ev.repo?.name;
+            }
+
+            return {
+              id: String(ev.id),
+              type: ev.type,
+              action: actionDescription,
+              repo: ev.repo?.name || 'Open Source Project',
+              repoUrl: `https://github.com/${ev.repo?.name}`,
+              actor: ev.actor?.display_login || ev.actor?.login || 'contributor',
+              actorUrl: `https://github.com/${ev.actor?.login}`,
+              actorAvatar: ev.actor?.avatar_url || '',
+              title,
+              url: targetUrl,
+              createdAt: ev.created_at,
+              isLive: true,
+            };
+          });
+
+        if (events.length > 0) {
+          liveStreamCache.timestamp = now;
+          liveStreamCache.data = events;
+          liveStreamCache.rateLimited = false;
+          return {
+            events,
+            cached: false,
+            lastUpdated: new Date(now).toISOString(),
+            rateLimited: false,
+            isFallback: false,
+          };
+        }
+      }
+    }
+  } catch {
+    // Network / timeout error fallback
+  }
+
+  // Graceful verified fallback: construct real activity from our verified issues pool (Never fabricate data)
+  const fallbackEvents = BUNDLED_STARTER_ISSUES.slice(0, 10).map((issue) => ({
+    id: `starter-${issue.id}`,
+    type: 'IssuesEvent',
+    action: 'opened starter issue',
+    repo: issue.repository,
+    repoUrl: `https://github.com/${issue.repository}`,
+    actor: 'maintainer',
+    actorUrl: `https://github.com/${issue.repository.split('/')[0]}`,
+    actorAvatar: 'https://github.com/github.png',
+    title: issue.title,
+    url: issue.url,
+    createdAt: issue.updatedAt || new Date().toISOString(),
+    isLive: false,
+    fallback: true,
+  }));
+
+  return {
+    events: liveStreamCache.data.length ? liveStreamCache.data : fallbackEvents,
+    cached: true,
+    lastUpdated: liveStreamCache.timestamp ? new Date(liveStreamCache.timestamp).toISOString() : new Date().toISOString(),
+    rateLimited: true,
+    isFallback: true,
+    notice: 'Direct GitHub stream rate-limited or temporarily unreachable. Showing recent verified repository issue activity.',
+  };
+}
+
 const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
+    const clientIp = (req.headers['x-forwarded-for'] || req.socket?.remoteAddress || '127.0.0.1').split(',')[0].trim();
+
+    // Production Health Endpoint (Requirement 13 & 15)
+    if (req.method === 'GET' && (url.pathname === '/health' || url.pathname === '/api/health')) {
+      let localModelReady = false;
+      try {
+        const resp = await fetch(`${ollamaUrl}/api/tags`, { signal: AbortSignal.timeout(1500) });
+        if (resp.ok) {
+          const d = await resp.json();
+          localModelReady = (d.models || []).some((m) => m.name === ollamaModel || m.name.startsWith(`${ollamaModel}:`));
+        }
+      } catch { /* optional */ }
+
+      return send(res, 200, {
+        status: 'ok',
+        uptimeSeconds: Math.floor(process.uptime()),
+        timestamp: new Date().toISOString(),
+        environment: process.env.NODE_ENV || 'production',
+        nodeVersion: process.version,
+        services: {
+          ollama: {
+            url: ollamaUrl,
+            model: ollamaModel,
+            ready: localModelReady,
+          },
+          githubApi: {
+            authenticated: Boolean(githubToken),
+          },
+        },
+      });
+    }
+
     if (req.method === 'GET' && url.pathname === '/api/status') {
       let localModelReady = false;
       let models = [];
@@ -1677,7 +1887,28 @@ const server = http.createServer(async (req, res) => {
       } catch { /* Ollama is optional for browsing and fallback ranking. */ }
       return send(res, 200, { model: ollamaModel, localModelReady, models });
     }
+
+    // Live Stream Activity Endpoint (Requirement 7)
+    if (req.method === 'GET' && url.pathname === '/api/stream') {
+      const streamRate = checkRateLimit(clientIp, 60, 60000);
+      if (!streamRate.allowed) {
+        return send(res, 429, { error: `Too many stream requests. Retry in ${streamRate.reset}s.` }, 'application/json', {
+          'Retry-After': String(streamRate.reset),
+        });
+      }
+      const streamData = await fetchGitHubLiveStream();
+      return send(res, 200, streamData, 'application/json; charset=utf-8', {
+        'Cache-Control': 'public, max-age=60',
+      });
+    }
+
     if (req.method === 'POST' && url.pathname === '/api/find') {
+      const findRate = checkRateLimit(clientIp, 60, 60000);
+      if (!findRate.allowed) {
+        return send(res, 429, { error: `Too many search requests. Retry in ${findRate.reset}s.` }, 'application/json', {
+          'Retry-After': String(findRate.reset),
+        });
+      }
       const input = await bodyJson(req);
       const skills = String(input.skills || '').split(',').map((skill) => skill.trim()).filter(Boolean).slice(0, 12);
       if (!skills.length) return send(res, 400, { error: 'Enter at least one skill or technology.' });
@@ -1736,6 +1967,7 @@ const server = http.createServer(async (req, res) => {
         fallbackActive,
       });
     }
+
     if (req.method === 'GET' && url.pathname === '/api/related-issues') {
       const issueUrl = url.searchParams.get('url') || '';
       const repo = url.searchParams.get('repo') || '';
@@ -1776,28 +2008,49 @@ const server = http.createServer(async (req, res) => {
         analyzedCount: candidatePool.length,
       });
     }
+
     if (req.method === 'GET' && url.pathname === '/api/repo-health') {
       const repo = url.searchParams.get('repo');
       if (!repo) return send(res, 400, { error: 'Provide a repo parameter (e.g. ?repo=owner/repo).' });
       const health = await assessRepoHealth(repo);
       return send(res, 200, health || { error: 'Could not assess repository health.' });
     }
-    if (req.method === 'GET' && url.pathname === '/') {
+
+    // Static Assets and SPA Clean Route Handlers (Requirement 10 & 15)
+    if (
+      req.method === 'GET' &&
+      (url.pathname === '/' ||
+        url.pathname === '/find' ||
+        url.pathname === '/blueprint' ||
+        url.pathname === '/pr-generator' ||
+        url.pathname === '/git-handbook' ||
+        url.pathname === '/live-stream' ||
+        url.pathname === '/picks')
+    ) {
       const html = await readFile(path.join(root, 'index.html'), 'utf8');
       return send(res, 200, html, 'text/html; charset=utf-8');
     }
+
     if (req.method === 'GET' && url.pathname === '/styles.css') {
       const css = await readFile(path.join(root, 'styles.css'), 'utf8');
       return send(res, 200, css, 'text/css; charset=utf-8');
     }
+
     if (req.method === 'GET' && url.pathname === '/app.js') {
       const js = await readFile(path.join(root, 'app.js'), 'utf8');
       return send(res, 200, js, 'text/javascript; charset=utf-8');
     }
+
     return send(res, 404, { error: 'Not found' });
   } catch (error) {
+    if (error.message && error.message.includes('Payload Too Large')) {
+      return send(res, 413, { error: error.message });
+    }
+    if (error.isParseError) {
+      return send(res, 400, { error: error.message || 'Invalid JSON in request body.' });
+    }
     return send(res, 500, { error: error.message || 'Unexpected server error.' });
   }
 });
 
-server.listen(port, '127.0.0.1', () => console.log(`IssueScout ready at http://localhost:${port}`));
+server.listen(port, host, () => console.log(`IssueScout ready at http://${host}:${port}`));

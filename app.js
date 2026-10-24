@@ -66,6 +66,11 @@ function updatePickButtons() {
     exportPlanButton.hidden = pickCount === 0;
     exportPlanButton.innerHTML = '<svg class="icon-svg" viewBox="0 0 24 24"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg> <span>Export plan (' + pickCount + ')</span>';
   }
+  const navPicksBadge = document.querySelector('#nav-picks-count');
+  if (navPicksBadge) {
+    navPicksBadge.textContent = pickCount;
+    navPicksBadge.hidden = pickCount === 0;
+  }
 }
 
 function loadChosenIssues() {
@@ -126,9 +131,34 @@ function escapeHtml(value = '') {
 }
 
 function showNotice(message = '', kind = '') {
-  notice.textContent = message;
-  notice.className = 'notice ' + kind;
-  notice.hidden = !message;
+  if (notice) {
+    notice.textContent = message;
+    notice.className = 'notice ' + kind;
+    notice.hidden = !message;
+  }
+  if (message) {
+    showGlobalToast(message, kind);
+  }
+}
+
+function showGlobalToast(message = '', kind = '') {
+  const toastContainer = document.querySelector('#global-toast');
+  if (!toastContainer) return;
+  const toast = document.createElement('div');
+  toast.className = `toast-item ${kind || 'info'}`;
+  toast.setAttribute('role', 'status');
+  toast.setAttribute('aria-live', 'polite');
+  const icon = kind === 'error'
+    ? '<svg class="icon-svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>'
+    : kind === 'success' || !kind
+      ? '<svg class="icon-svg" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>'
+      : '<svg class="icon-svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>';
+  toast.innerHTML = `<span class="toast-icon">${icon}</span><span class="toast-msg">${escapeHtml(message)}</span>`;
+  toastContainer.appendChild(toast);
+  setTimeout(() => {
+    toast.classList.add('fade-out');
+    setTimeout(() => toast.remove(), 300);
+  }, 3500);
 }
 
 /**
@@ -1382,7 +1412,11 @@ function renderIssueCards(issues) {
       renderSkillGapBlock(issue),
       healthBlock,
       relatedBlock,
-      '<div class="issue-bottom"><span class="first-step"><b>First step</b> · ' + escapeHtml(issue.firstStep) + '</span><div class="issue-actions"><button class="pick-button' + (picked ? ' picked' : '') + '" type="button" data-issue-id="' + issueId + '" aria-pressed="' + picked + '">' + pickButtonContent + '</button><a class="guide-link" href="' + contributingUrl + '" target="_blank" rel="noopener noreferrer" title="View repository contribution guidelines"><svg class="icon-svg" viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg> <span>Guide</span></a><a class="open-link" href="' + escapeHtml(issue.url) + '" target="_blank" rel="noopener noreferrer"><span>View issue</span> <svg class="icon-svg" viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg></a></div></div>',
+      '<div class="issue-bottom"><span class="first-step"><b>First step</b> · ' + escapeHtml(issue.firstStep) + '</span><div class="issue-actions">' +
+      '<button class="pick-button' + (picked ? ' picked' : '') + '" type="button" data-issue-id="' + issueId + '" aria-pressed="' + picked + '">' + pickButtonContent + '</button>' +
+      '<button class="blueprint-btn" type="button" data-action="blueprint" data-issue-id="' + issueId + '" title="Step-by-step contribution plan"><svg class="icon-svg" viewBox="0 0 24 24"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg> <span>Blueprint</span></button>' +
+      '<button class="pr-btn" type="button" data-action="pr-gen" data-issue-id="' + issueId + '" title="Generate PR Markdown"><svg class="icon-svg" viewBox="0 0 24 24"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M13 6h3a2 2 0 0 1 2 2v7"/><line x1="6" y1="9" x2="6" y2="21"/></svg> <span>PR Gen</span></button>' +
+      '<a class="guide-link" href="' + contributingUrl + '" target="_blank" rel="noopener noreferrer" title="View repository contribution guidelines"><svg class="icon-svg" viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg> <span>Guide</span></a><a class="open-link" href="' + escapeHtml(issue.url) + '" target="_blank" rel="noopener noreferrer"><span>View issue</span> <svg class="icon-svg" viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg></a></div></div>',
       '<p class="' + freshnessClass + '"><span>' + escapeHtml(freshness.label) + '</span> · ' + freshnessNote + '</p>',
       '</article>',
     ].join('');
@@ -1681,6 +1715,14 @@ function renderLearningPathCards(issues, stage) {
             <button class="pick-button${isPicked ? ' picked' : ''}" type="button" data-issue-id="${issueId}" aria-pressed="${isPicked}">
               ${pickButtonContent}
             </button>
+            <button class="blueprint-btn" type="button" data-action="blueprint" data-issue-id="${issueId}" title="Step-by-step contribution plan">
+              <svg class="icon-svg" viewBox="0 0 24 24"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
+              <span>Blueprint</span>
+            </button>
+            <button class="pr-btn" type="button" data-action="pr-gen" data-issue-id="${issueId}" title="Generate PR Markdown">
+              <svg class="icon-svg" viewBox="0 0 24 24"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M13 6h3a2 2 0 0 1 2 2v7"/><line x1="6" y1="9" x2="6" y2="21"/></svg>
+              <span>PR Gen</span>
+            </button>
             <button class="${progressBtnClass} learning-progress-btn" type="button" data-issue-id="${issueId}" aria-pressed="${isInProgress}">
               ${progressBtnText}
             </button>
@@ -1815,6 +1857,28 @@ results.addEventListener('click', (event) => {
     parentBlock.querySelectorAll('.skill-cat-pill').forEach((p) => {
       p.classList.toggle('active', p === catPill);
     });
+    return;
+  }
+
+  // 0b. Blueprint button click
+  const blueprintBtn = event.target.closest('[data-action="blueprint"], .blueprint-btn');
+  if (blueprintBtn) {
+    const issueId = blueprintBtn.dataset.issueId;
+    const issue = findIssueById(issueId);
+    if (issue) {
+      setSelectedIssue(issue, 'blueprint');
+    }
+    return;
+  }
+
+  // 0c. PR Gen button click
+  const prBtn = event.target.closest('[data-action="pr-gen"], .pr-btn');
+  if (prBtn) {
+    const issueId = prBtn.dataset.issueId;
+    const issue = findIssueById(issueId);
+    if (issue) {
+      setSelectedIssue(issue, 'pr-gen');
+    }
     return;
   }
 
@@ -2181,3 +2245,1587 @@ function getIssueEvidence(issue) {
     return [{ source: field.source, skill: needle, quote }];
   });
 }
+
+/* ==========================================================================
+   MASTER INTEGRATION: THEMES, ROUTING, BLUEPRINT, PR GEN, HANDBOOK, STREAM, PICKS
+   ========================================================================== */
+
+const THEME_STORAGE_KEY = 'issuescout:theme';
+const SELECTED_ISSUE_KEY = 'issuescout:selected-issue';
+const BLUEPRINT_PROGRESS_KEY = 'issuescout:blueprint-progress:v1';
+const CONTRIBUTOR_USERNAME_KEY = 'issuescout:contributor-username';
+
+let selectedIssue = loadSelectedIssue();
+let streamPollingTimer = null;
+let streamIsPaused = false;
+let streamLastFetchedEvents = [];
+let seenStreamEventIds = new Set();
+
+/* --- 1. Theme Management --- */
+function initTheme() {
+  const toggleBtn = document.querySelector('#theme-toggle');
+  let currentTheme = localStorage.getItem(THEME_STORAGE_KEY);
+
+  if (!currentTheme) {
+    currentTheme = window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+  }
+
+  applyTheme(currentTheme);
+
+  if (toggleBtn) {
+    toggleBtn.addEventListener('click', () => {
+      const active = document.documentElement.getAttribute('data-theme') || 'dark';
+      const next = active === 'dark' ? 'light' : 'dark';
+      applyTheme(next);
+      try {
+        localStorage.setItem(THEME_STORAGE_KEY, next);
+      } catch {}
+      showNotice(`Theme switched to ${next} mode.`, 'info');
+    });
+  }
+
+  if (window.matchMedia) {
+    window.matchMedia('(prefers-color-scheme: light)').addEventListener('change', (e) => {
+      if (!localStorage.getItem(THEME_STORAGE_KEY)) {
+        applyTheme(e.matches ? 'light' : 'dark');
+      }
+    });
+  }
+}
+
+function applyTheme(theme) {
+  document.documentElement.setAttribute('data-theme', theme);
+  const toggleBtn = document.querySelector('#theme-toggle');
+  if (toggleBtn) {
+    toggleBtn.setAttribute('data-current', theme);
+    toggleBtn.title = `Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`;
+    toggleBtn.setAttribute('aria-label', `Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`);
+    toggleBtn.innerHTML = theme === 'dark'
+      ? '<svg class="icon-svg theme-icon-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>'
+      : '<svg class="icon-svg theme-icon-moon" viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>';
+  }
+}
+
+/* --- 2. Shared Selected Issue State --- */
+function loadSelectedIssue() {
+  try {
+    const raw = localStorage.getItem(SELECTED_ISSUE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+function setSelectedIssue(issue, nextView = null) {
+  if (!issue) return;
+  selectedIssue = issue;
+  try {
+    localStorage.setItem(SELECTED_ISSUE_KEY, JSON.stringify(issue));
+  } catch {}
+
+  const issueNum = issue.number || (issue.url ? issue.url.split('/').pop() : '');
+  showNotice(`Selected issue #${issueNum}: "${issue.title || 'Starter issue'}"`, 'info');
+
+  if (nextView) {
+    switchAppView(nextView);
+  }
+}
+
+function findIssueById(issueId) {
+  if (!issueId) return selectedIssue;
+  const idStr = String(issueId);
+  const foundInCurrent = currentIssues.find((item) => String(item.id) === idStr);
+  if (foundInCurrent) return foundInCurrent;
+  if (chosenIssues[idStr]) return chosenIssues[idStr];
+  if (selectedIssue && String(selectedIssue.id) === idStr) return selectedIssue;
+  return null;
+}
+
+/* --- 3. View Routing System --- */
+const VIEW_IDS = ['find', 'blueprint', 'pr-gen', 'handbook', 'stream', 'picks'];
+
+function initAppRouting() {
+  document.querySelectorAll('.nav-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const view = btn.dataset.view;
+      if (view && VIEW_IDS.includes(view)) {
+        switchAppView(view);
+      }
+    });
+  });
+
+  window.addEventListener('hashchange', () => {
+    const hash = window.location.hash.replace('#', '').trim();
+    if (VIEW_IDS.includes(hash)) {
+      switchAppView(hash, false);
+    }
+  });
+
+  const initialHash = window.location.hash.replace('#', '').trim();
+  if (VIEW_IDS.includes(initialHash)) {
+    switchAppView(initialHash, false);
+  } else {
+    switchAppView('find', false);
+  }
+}
+
+function switchAppView(viewId, updateHash = true) {
+  if (!VIEW_IDS.includes(viewId)) viewId = 'find';
+
+  // Toggle navigation buttons
+  document.querySelectorAll('.nav-btn').forEach((btn) => {
+    const isActive = btn.dataset.view === viewId;
+    btn.classList.toggle('active', isActive);
+    btn.setAttribute('aria-current', isActive ? 'page' : 'false');
+  });
+
+  // Toggle view containers
+  VIEW_IDS.forEach((id) => {
+    const el = document.querySelector(`#view-${id}`);
+    if (el) {
+      if (id === viewId) {
+        el.classList.add('active');
+        el.removeAttribute('hidden');
+      } else {
+        el.classList.remove('active');
+        el.setAttribute('hidden', '');
+      }
+    }
+  });
+
+  if (updateHash && window.location.hash !== `#${viewId}`) {
+    window.location.hash = `#${viewId}`;
+  }
+
+  // Handle stream polling lifecycle
+  if (viewId === 'stream') {
+    startStreamPolling();
+  } else {
+    stopStreamPolling();
+  }
+
+  // Trigger view renderers
+  if (viewId === 'blueprint') {
+    renderBlueprintView();
+  } else if (viewId === 'pr-gen') {
+    renderPRGeneratorView();
+  } else if (viewId === 'handbook') {
+    renderGitHandbookView();
+  } else if (viewId === 'picks') {
+    renderPicksView();
+  }
+
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+/* --- 4. Fix Blueprint View --- */
+function loadBlueprintProgress(issueId) {
+  try {
+    const map = JSON.parse(localStorage.getItem(BLUEPRINT_PROGRESS_KEY) || '{}');
+    return map[issueId] || {};
+  } catch {
+    return {};
+  }
+}
+
+function saveBlueprintProgress(issueId, progress) {
+  try {
+    const map = JSON.parse(localStorage.getItem(BLUEPRINT_PROGRESS_KEY) || '{}');
+    map[issueId] = progress;
+    localStorage.setItem(BLUEPRINT_PROGRESS_KEY, JSON.stringify(map));
+  } catch {}
+}
+
+function getStoredContributorUsername() {
+  try {
+    return localStorage.getItem(CONTRIBUTOR_USERNAME_KEY) || 'your-username';
+  } catch {
+    return 'your-username';
+  }
+}
+
+function setStoredContributorUsername(name) {
+  try {
+    localStorage.setItem(CONTRIBUTOR_USERNAME_KEY, name.trim());
+  } catch {}
+}
+
+function extractReferencedFiles(issue) {
+  if (!issue) return [];
+  const text = `${issue.title || ''}\n${issue.body || ''}`;
+  const fileRegex = /(?:[\w-]+\/)*[\w-]+\.(?:js|ts|jsx|tsx|py|go|rs|rb|java|cpp|c|h|md|json|yml|yaml|toml|css|html|sh)\b/gi;
+  const matches = text.match(fileRegex) || [];
+  const unique = [...new Set(matches.map((f) => f.trim()))].filter((f) => !f.startsWith('http') && f.length < 90);
+  return unique.slice(0, 8);
+}
+
+function detectSuggestedCommands(issue) {
+  const combined = `${issue?.title || ''} ${issue?.body || ''} ${(issue?.labels || []).join(' ')} ${issue?.repository || ''}`.toLowerCase();
+  const commands = [];
+
+  if (combined.includes('python') || combined.includes('pytest') || combined.includes('.py')) {
+    commands.push({ tool: 'pytest', cmd: 'pytest -v', desc: 'Run Python test suite' });
+    commands.push({ tool: 'flake8 / ruff', cmd: 'ruff check .', desc: 'Python linter & code checks' });
+  } else if (combined.includes('rust') || combined.includes('cargo') || combined.includes('.rs')) {
+    commands.push({ tool: 'cargo test', cmd: 'cargo test', desc: 'Run Rust unit and integration tests' });
+    commands.push({ tool: 'cargo clippy', cmd: 'cargo clippy', desc: 'Rust static analysis and linter' });
+  } else if (combined.includes('go') || combined.includes('golang') || combined.includes('.go')) {
+    commands.push({ tool: 'go test', cmd: 'go test ./...', desc: 'Run Go tests across all packages' });
+    commands.push({ tool: 'golangci-lint', cmd: 'golangci-lint run', desc: 'Go linter suite' });
+  } else {
+    // Default Node.js / Web ecosystem
+    commands.push({ tool: 'npm test', cmd: 'npm test', desc: 'Run repository test runner' });
+    commands.push({ tool: 'npm run lint', cmd: 'npm run lint', desc: 'Check code formatting and lint rules' });
+    commands.push({ tool: 'npm install', cmd: 'npm install', desc: 'Install project dependencies' });
+  }
+
+  return commands;
+}
+
+function renderBlueprintView() {
+  const container = document.querySelector('#view-blueprint');
+  if (!container) return;
+
+  const issue = selectedIssue;
+  if (!issue) {
+    const pickList = Object.values(chosenIssues);
+    container.innerHTML = `
+      <div class="blueprint-empty-banner card">
+        <div class="empty-icon-wrap">
+          <svg class="empty-hero-icon" viewBox="0 0 24 24"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
+        </div>
+        <h2>Select an Issue to Build a Fix Blueprint</h2>
+        <p>A Fix Blueprint gives you a step-by-step verified action plan: claiming the issue, setting up your fork, finding files, running tests, and preparing a clean PR.</p>
+        <div class="empty-cta-actions">
+          <button class="primary-btn" type="button" onclick="switchAppView('find')">Browse Starter Issues</button>
+          ${pickList.length > 0 ? `<button class="secondary-btn" type="button" onclick="switchAppView('picks')">View My Picks (${pickList.length})</button>` : ''}
+        </div>
+        ${pickList.length > 0 ? `
+          <div class="blueprint-recent-picks">
+            <h4>Or start with one of your saved picks:</h4>
+            <div class="recent-pick-chips">
+              ${pickList.slice(0, 5).map((p) => `
+                <button class="recent-pick-btn" type="button" data-issue-id="${p.id}">
+                  <span class="pick-repo">${escapeHtml(p.repository || '')}</span>: ${escapeHtml(p.title || '')}
+                </button>
+              `).join('')}
+            </div>
+          </div>
+        ` : ''}
+      </div>
+    `;
+
+    container.querySelectorAll('.recent-pick-btn').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const p = findIssueById(btn.dataset.issueId);
+        if (p) setSelectedIssue(p, 'blueprint');
+      });
+    });
+    return;
+  }
+
+  const issueId = String(issue.id || issue.url || 'current');
+  const progress = loadBlueprintProgress(issueId);
+  const totalSteps = 5;
+  const completedSteps = ['step-1', 'step-2', 'step-3', 'step-4', 'step-5'].filter((s) => progress[s]).length;
+  const progressPct = Math.round((completedSteps / totalSteps) * 100);
+
+  const repoFullName = issue.repository || 'owner/repo';
+  const [repoOwner, repoName] = repoFullName.includes('/') ? repoFullName.split('/') : ['owner', repoFullName];
+  const issueNum = issue.number || (issue.url ? issue.url.split('/').pop() : '1');
+  const issueSlug = String(issue.title || 'starter')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '')
+    .slice(0, 24);
+  const branchName = `fix-${issueNum}-${issueSlug || 'patch'}`;
+  const username = getStoredContributorUsername();
+
+  const filesFound = extractReferencedFiles(issue);
+  const suggestedCommands = detectSuggestedCommands(issue);
+  const claimCommentTemplate = `Hi @maintainers! I'd like to work on this issue if it's currently unassigned. I've reviewed the issue description and the contributing guidelines, and I plan to submit a minimal, tested PR. Thanks!`;
+
+  container.innerHTML = `
+    <div class="blueprint-container">
+      <!-- Header Banner -->
+      <header class="blueprint-header-card card">
+        <div class="blueprint-topline">
+          <div class="blueprint-meta">
+            <span class="repo-badge">${escapeHtml(repoFullName)}</span>
+            <span class="issue-badge">Issue #${escapeHtml(issueNum)}</span>
+            ${renderDifficultyBadge(issue.difficulty)}
+          </div>
+          <div class="blueprint-header-actions">
+            <button class="secondary-btn btn-sm" id="blueprint-change-issue-btn" type="button" title="Switch to another issue">Switch Issue</button>
+            <button class="primary-btn btn-sm" type="button" onclick="switchAppView('pr-gen')" title="Open PR Generator for this issue">
+              <svg class="icon-svg" viewBox="0 0 24 24"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M13 6h3a2 2 0 0 1 2 2v7"/><line x1="6" y1="9" x2="6" y2="21"/></svg>
+              <span>Open in PR Gen</span>
+            </button>
+          </div>
+        </div>
+        <h1 class="blueprint-title">
+          <a href="${escapeHtml(issue.url || '#')}" target="_blank" rel="noopener noreferrer">${escapeHtml(issue.title || 'Starter Issue')}</a>
+        </h1>
+        <p class="blueprint-subtitle">Follow this 5-stage contribution blueprint to take this issue from discovery to an accepted pull request.</p>
+        
+        <!-- Progress Tracker -->
+        <div class="blueprint-progress-box">
+          <div class="progress-info-row">
+            <span class="progress-label">Blueprint Completion: <b>${progressPct}%</b> (${completedSteps} of ${totalSteps} steps completed)</span>
+            <button class="text-btn btn-xs" id="blueprint-reset-btn" type="button">Reset progress</button>
+          </div>
+          <div class="blueprint-progress-track" role="progressbar" aria-valuenow="${progressPct}" aria-valuemin="0" aria-valuemax="100">
+            <div class="blueprint-progress-fill" style="width: ${progressPct}%;"></div>
+          </div>
+        </div>
+      </header>
+
+      <!-- Step Cards -->
+      <div class="blueprint-steps-stack">
+        <!-- Step 1: Claim -->
+        <section class="blueprint-step-card card ${progress['step-1'] ? 'step-completed' : ''}" data-step="step-1">
+          <div class="step-card-header">
+            <label class="step-checkbox-label">
+              <input type="checkbox" class="step-checkbox" data-step="step-1" ${progress['step-1'] ? 'checked' : ''}/>
+              <span class="step-pill">Stage 1</span>
+              <span class="step-card-title">Verify Availability &amp; Request Assignment</span>
+            </label>
+          </div>
+          <div class="step-card-body">
+            <p>Before writing code, inspect the issue thread on GitHub. Look for recent comments from contributors saying "Can I work on this?" or existing pull requests that link to this issue.</p>
+            <div class="blueprint-callout info">
+              <svg class="icon-svg callout-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+              <span><b>Maintainer Etiquette:</b> Only request assignment if no active PR exists. Avoid commenting "I want to work on this" across multiple issues simultaneously.</span>
+            </div>
+            <div class="snippet-box">
+              <div class="snippet-header">
+                <span>Copyable maintainer comment template</span>
+                <button class="copy-btn btn-xs" type="button" data-copy="${escapeHtml(claimCommentTemplate)}">Copy comment</button>
+              </div>
+              <textarea class="snippet-textarea" readonly rows="3">${claimCommentTemplate}</textarea>
+            </div>
+            <div class="step-actions-row">
+              <a class="secondary-btn btn-sm" href="${escapeHtml(issue.url || '#')}" target="_blank" rel="noopener noreferrer">
+                <span>Open Issue on GitHub</span>
+                <svg class="icon-svg" viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+              </a>
+            </div>
+          </div>
+        </section>
+
+        <!-- Step 2: Fork & Branch -->
+        <section class="blueprint-step-card card ${progress['step-2'] ? 'step-completed' : ''}" data-step="step-2">
+          <div class="step-card-header">
+            <label class="step-checkbox-label">
+              <input type="checkbox" class="step-checkbox" data-step="step-2" ${progress['step-2'] ? 'checked' : ''}/>
+              <span class="step-pill">Stage 2</span>
+              <span class="step-card-title">Fork Repository &amp; Configure Remote Branch</span>
+            </label>
+          </div>
+          <div class="step-card-body">
+            <p>Fork the repository on GitHub to your account, then clone your fork locally and configure an <code>upstream</code> remote pointing to the maintainer repo so you can fetch latest changes.</p>
+            <div class="username-config-row">
+              <label for="blueprint-username-input">Your GitHub Username:</label>
+              <input type="text" id="blueprint-username-input" class="inline-input" value="${escapeHtml(username)}" placeholder="e.g. octocat" />
+            </div>
+            <div class="snippet-box">
+              <div class="snippet-header">
+                <span>Git setup commands for your terminal</span>
+                <button class="copy-btn btn-xs" id="copy-fork-cmds-btn" type="button">Copy all commands</button>
+              </div>
+              <pre class="code-block" id="fork-cmds-pre"><code>git clone https://github.com/${escapeHtml(username)}/${escapeHtml(repoName)}.git
+cd ${escapeHtml(repoName)}
+git remote add upstream https://github.com/${escapeHtml(repoFullName)}.git
+git fetch upstream
+git checkout -b ${escapeHtml(branchName)}</code></pre>
+            </div>
+          </div>
+        </section>
+
+        <!-- Step 3: Locate Files & Reproduce -->
+        <section class="blueprint-step-card card ${progress['step-3'] ? 'step-completed' : ''}" data-step="step-3">
+          <div class="step-card-header">
+            <label class="step-checkbox-label">
+              <input type="checkbox" class="step-checkbox" data-step="step-3" ${progress['step-3'] ? 'checked' : ''}/>
+              <span class="step-pill">Stage 3</span>
+              <span class="step-card-title">Locate Target Files &amp; Reproduce Problem</span>
+            </label>
+          </div>
+          <div class="step-card-body">
+            <p>Before editing, read the relevant source files and reproduce the issue locally or write a failing test case.</p>
+            ${filesFound.length > 0 ? `
+              <div class="blueprint-files-box">
+                <span class="files-box-title">Files explicitly mentioned in issue description:</span>
+                <ul class="blueprint-files-list">
+                  ${filesFound.map((f) => `
+                    <li>
+                      <a href="https://github.com/${escapeHtml(repoFullName)}/blob/HEAD/${escapeHtml(f)}" target="_blank" rel="noopener noreferrer">
+                        <code>${escapeHtml(f)}</code>
+                      </a>
+                    </li>
+                  `).join('')}
+                </ul>
+                <small class="verified-files-note">Note: Links open the file on the default branch of the official maintainer repository.</small>
+              </div>
+            ` : `
+              <div class="blueprint-callout tip">
+                <svg class="icon-svg callout-icon" viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+                <span>No specific filenames were detected in the issue text. Search the repository codebase for keywords from the issue title: <code>${escapeHtml(issue.title || '')}</code></span>
+              </div>
+            `}
+            <div class="blueprint-instructions-block">
+              <h5>Verification strategy:</h5>
+              <ol class="blueprint-ordered-list">
+                <li>Search for error messages or component names mentioned in the issue.</li>
+                <li>Write a small reproducing test or manually verify the unexpected behavior.</li>
+                <li>Never assume a bug is reproduced until you trigger it yourself in your development environment.</li>
+              </ol>
+            </div>
+          </div>
+        </section>
+
+        <!-- Step 4: Run Tests & Linters -->
+        <section class="blueprint-step-card card ${progress['step-4'] ? 'step-completed' : ''}" data-step="step-4">
+          <div class="step-card-header">
+            <label class="step-checkbox-label">
+              <input type="checkbox" data-step="step-4" class="step-checkbox" ${progress['step-4'] ? 'checked' : ''}/>
+              <span class="step-pill">Stage 4</span>
+              <span class="step-card-title">Run Repository Tests &amp; Lint Checks</span>
+            </label>
+          </div>
+          <div class="step-card-body">
+            <p>Ensure that all existing tests and code formatting checks pass before making your changes, and again after implementing your fix.</p>
+            <div class="commands-grid">
+              ${suggestedCommands.map((c) => `
+                <div class="command-card">
+                  <div class="cmd-top">
+                    <span class="cmd-name">${escapeHtml(c.tool)}</span>
+                    <button class="copy-btn btn-xs" type="button" data-copy="${escapeHtml(c.cmd)}">Copy</button>
+                  </div>
+                  <pre class="cmd-snippet"><code>${escapeHtml(c.cmd)}</code></pre>
+                  <span class="cmd-desc">${escapeHtml(c.desc)}</span>
+                </div>
+              `).join('')}
+            </div>
+            <p class="disclaimer-note">Disclaimer: Suggested commands are inferred from repository metadata and language indicators. Check the repository's <code>CONTRIBUTING.md</code> or <code>README.md</code> for authoritative instructions.</p>
+          </div>
+        </section>
+
+        <!-- Step 5: Implement, Validate & Submit -->
+        <section class="blueprint-step-card card ${progress['step-5'] ? 'step-completed' : ''}" data-step="step-5">
+          <div class="step-card-header">
+            <label class="step-checkbox-label">
+              <input type="checkbox" data-step="step-5" class="step-checkbox" ${progress['step-5'] ? 'checked' : ''}/>
+              <span class="step-pill">Stage 5</span>
+              <span class="step-card-title">Commit, Push &amp; Open Pull Request</span>
+            </label>
+          </div>
+          <div class="step-card-body">
+            <p>Keep your changes focused strictly on resolving this single issue. Review your diff before committing.</p>
+            <div class="snippet-box">
+              <div class="snippet-header">
+                <span>Commit &amp; Push commands</span>
+                <button class="copy-btn btn-xs" id="copy-submit-cmds-btn" type="button">Copy commands</button>
+              </div>
+              <pre class="code-block" id="submit-cmds-pre"><code>git diff
+git add .
+git commit -m "fix: resolve ${escapeHtml(issueSlug || 'issue')} (fixes #${escapeHtml(issueNum)})"
+git push -u origin ${escapeHtml(branchName)}</code></pre>
+            </div>
+            <div class="submit-cta-banner">
+              <div class="cta-text">
+                <b>Ready to write your pull request description?</b>
+                <span>Use our PR Generator to build a structured, maintainer-friendly markdown description referencing #${escapeHtml(issueNum)}.</span>
+              </div>
+              <button class="primary-btn" type="button" onclick="switchAppView('pr-gen')">Launch PR Generator</button>
+            </div>
+          </div>
+        </section>
+      </div>
+    </div>
+  `;
+
+  // Attach blueprint event listeners
+  container.querySelectorAll('.step-checkbox').forEach((cb) => {
+    cb.addEventListener('change', (e) => {
+      const stepKey = e.target.dataset.step;
+      const currentProgress = loadBlueprintProgress(issueId);
+      currentProgress[stepKey] = e.target.checked;
+      saveBlueprintProgress(issueId, currentProgress);
+
+      const parentCard = e.target.closest('.blueprint-step-card');
+      if (parentCard) parentCard.classList.toggle('step-completed', e.target.checked);
+
+      // Refresh progress bar
+      const updatedTotal = 5;
+      const updatedCompleted = ['step-1', 'step-2', 'step-3', 'step-4', 'step-5'].filter((s) => currentProgress[s]).length;
+      const updatedPct = Math.round((updatedCompleted / updatedTotal) * 100);
+      const fillEl = container.querySelector('.blueprint-progress-fill');
+      const labelEl = container.querySelector('.progress-label b');
+      if (fillEl) fillEl.style.width = `${updatedPct}%`;
+      if (labelEl) labelEl.textContent = `${updatedPct}%`;
+
+      if (e.target.checked) {
+        showNotice(`Completed Stage ${stepKey.replace('step-', '')}!`, 'success');
+      }
+    });
+  });
+
+  const usernameInput = container.querySelector('#blueprint-username-input');
+  if (usernameInput) {
+    usernameInput.addEventListener('input', (e) => {
+      const val = e.target.value.trim() || 'your-username';
+      setStoredContributorUsername(val);
+      const pre = container.querySelector('#fork-cmds-pre code');
+      if (pre) {
+        pre.textContent = `git clone https://github.com/${val}/${repoName}.git
+cd ${repoName}
+git remote add upstream https://github.com/${repoFullName}.git
+git fetch upstream
+git checkout -b ${branchName}`;
+      }
+    });
+  }
+
+  const copyForkBtn = container.querySelector('#copy-fork-cmds-btn');
+  if (copyForkBtn) {
+    copyForkBtn.addEventListener('click', async () => {
+      const pre = container.querySelector('#fork-cmds-pre code');
+      if (pre) {
+        await copyToClipboard(pre.textContent);
+        showNotice('Copied fork commands to clipboard.', 'success');
+      }
+    });
+  }
+
+  const copySubmitBtn = container.querySelector('#copy-submit-cmds-btn');
+  if (copySubmitBtn) {
+    copySubmitBtn.addEventListener('click', async () => {
+      const pre = container.querySelector('#submit-cmds-pre code');
+      if (pre) {
+        await copyToClipboard(pre.textContent);
+        showNotice('Copied commit & push commands.', 'success');
+      }
+    });
+  }
+
+  container.querySelectorAll('.copy-btn[data-copy]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const text = btn.dataset.copy;
+      if (text) {
+        await copyToClipboard(text);
+        showNotice('Copied to clipboard.', 'success');
+      }
+    });
+  });
+
+  const resetBtn = container.querySelector('#blueprint-reset-btn');
+  if (resetBtn) {
+    resetBtn.addEventListener('click', () => {
+      if (confirm('Reset your progress on this blueprint?')) {
+        saveBlueprintProgress(issueId, {});
+        renderBlueprintView();
+        showNotice('Blueprint progress reset.', 'info');
+      }
+    });
+  }
+
+  const switchBtn = container.querySelector('#blueprint-change-issue-btn');
+  if (switchBtn) {
+    switchBtn.addEventListener('click', () => {
+      switchAppView('find');
+    });
+  }
+}
+
+/* --- 5. PR Generator View --- */
+const PR_TEMPLATES = {
+  bugfix: {
+    name: 'Bug Fix',
+    prefix: 'fix',
+    description: 'Fixes an issue or unintended behavior in the codebase.',
+    summary: 'Briefly describe what bug this PR addresses and how the change resolves it.',
+    testing: '- [ ] Ran existing test suite locally and verified all tests pass.\n- [ ] Added unit or integration test reproducing the bug to prevent regression.\n- [ ] Manually tested the fix in development environment.',
+    checklist: [
+      { text: 'My code follows the style guidelines of this project', checked: true },
+      { text: 'I have performed a self-review of my own code', checked: true },
+      { text: 'I have commented my code where necessary', checked: false },
+      { text: 'I have verified that all existing and new tests pass', checked: true },
+      { text: 'My changes generate no new warnings or lint errors', checked: true },
+    ],
+  },
+  feature: {
+    name: 'New Feature',
+    prefix: 'feat',
+    description: 'Adds new functionality, enhancements, or capabilities.',
+    summary: 'Describe the new feature or capability added by this pull request.',
+    testing: '- [ ] Added test coverage for new functionality.\n- [ ] Verified backwards compatibility.\n- [ ] Tested across supported platforms and browsers.',
+    checklist: [
+      { text: 'I have followed the architecture and contributing guidelines', checked: true },
+      { text: 'I have added tests that prove my feature works', checked: true },
+      { text: 'I have updated the corresponding documentation', checked: false },
+      { text: 'My branch is up to date with the latest upstream main', checked: true },
+    ],
+  },
+  docs: {
+    name: 'Documentation',
+    prefix: 'docs',
+    description: 'Documentation updates, guide corrections, or typo fixes.',
+    summary: 'Clarified instructions and corrected documentation for contributors.',
+    testing: '- [ ] Previewed documentation build locally.\n- [ ] Checked for broken links and formatting issues.',
+    checklist: [
+      { text: 'I have verified the accuracy of the updated documentation', checked: true },
+      { text: 'Grammar and formatting adhere to project standards', checked: true },
+      { text: 'All links point to valid resources', checked: true },
+    ],
+  },
+  refactor: {
+    name: 'Refactor / Clean Up',
+    prefix: 'refactor',
+    description: 'Code restructuring without changing external behavior.',
+    summary: 'Refactored code structure to improve maintainability and readability without altering external behavior.',
+    testing: '- [ ] Ran complete test suite to ensure zero regressions.\n- [ ] Benchmarked performance where relevant.',
+    checklist: [
+      { text: 'Behavior remains identical to previous implementation', checked: true },
+      { text: 'Existing tests continue to pass without modification', checked: true },
+      { text: 'Code cleanliness and readability are improved', checked: true },
+    ],
+  },
+};
+
+let activePRTemplateKey = 'bugfix';
+
+function renderPRGeneratorView() {
+  const container = document.querySelector('#view-pr-gen');
+  if (!container) return;
+
+  const issue = selectedIssue;
+  const issueNum = issue ? (issue.number || (issue.url ? issue.url.split('/').pop() : '')) : '';
+  const repoFullName = issue?.repository || '';
+  const initialTitle = issue ? `fix: resolve ${issue.title || 'issue'}` : 'fix: description of change';
+  const initialRef = issue?.url || (issueNum ? `#${issueNum}` : '');
+
+  const template = PR_TEMPLATES[activePRTemplateKey] || PR_TEMPLATES.bugfix;
+
+  container.innerHTML = `
+    <div class="pr-gen-layout">
+      <!-- Top banner -->
+      <header class="pr-gen-header card">
+        <div class="pr-gen-header-top">
+          <h2>Pull Request Description Generator</h2>
+          ${issue ? `
+            <div class="pr-selected-badge">
+              <span>Linked to: <b>${escapeHtml(repoFullName)} #${escapeHtml(issueNum)}</b></span>
+              <button class="text-btn btn-xs" type="button" onclick="switchAppView('blueprint')">View Blueprint</button>
+            </div>
+          ` : `
+            <div class="pr-no-issue-badge">
+              <span>No issue selected.</span>
+              <button class="text-btn btn-xs" type="button" onclick="switchAppView('find')">Pick an issue</button>
+            </div>
+          `}
+        </div>
+        <p>Generate clean, maintainer-ready GitHub PR descriptions with structured summaries, testing verification, and checklists.</p>
+        
+        <!-- Template Selector -->
+        <div class="template-pills-row">
+          <span class="template-label">Template:</span>
+          ${Object.entries(PR_TEMPLATES).map(([key, t]) => `
+            <button class="template-pill ${key === activePRTemplateKey ? 'active' : ''}" type="button" data-tpl="${key}">
+              ${escapeHtml(t.name)}
+            </button>
+          `).join('')}
+        </div>
+      </header>
+
+      <!-- Main Split Pane -->
+      <div class="pr-split-container">
+        <!-- Left: Form & Raw Editor -->
+        <div class="pr-editor-pane card">
+          <div class="pane-header">
+            <h3>PR Details</h3>
+            <span class="pane-sub">Inputs automatically sync with Markdown preview</span>
+          </div>
+
+          <form id="pr-gen-form" class="pr-form">
+            <div class="form-group">
+              <label for="pr-title-input">PR Title</label>
+              <input type="text" id="pr-title-input" class="form-control" value="${escapeHtml(initialTitle)}" placeholder="e.g. fix: handle missing token in auth header" required />
+            </div>
+
+            <div class="form-row">
+              <div class="form-group col">
+                <label for="pr-issue-input">Referenced Issue / URL</label>
+                <input type="text" id="pr-issue-input" class="form-control" value="${escapeHtml(initialRef)}" placeholder="e.g. #42 or https://github.com/..." />
+              </div>
+              <div class="form-group col">
+                <label for="pr-type-select">Type of Change</label>
+                <select id="pr-type-select" class="form-control">
+                  <option value="Bug fix (non-breaking change which fixes an issue)">Bug fix</option>
+                  <option value="New feature (non-breaking change which adds functionality)">New feature</option>
+                  <option value="Breaking change (fix or feature that causes existing functionality to change)">Breaking change</option>
+                  <option value="Documentation update">Documentation</option>
+                  <option value="Refactor or code cleanup">Refactor</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label for="pr-summary-textarea">Summary of Changes</label>
+              <textarea id="pr-summary-textarea" class="form-control" rows="4" placeholder="Explain what was changed, why, and how it was implemented...">${escapeHtml(template.summary)}</textarea>
+            </div>
+
+            <div class="form-group">
+              <label for="pr-testing-textarea">Testing Performed</label>
+              <textarea id="pr-testing-textarea" class="form-control" rows="3" placeholder="Describe automated tests and manual verification performed...">${escapeHtml(template.testing)}</textarea>
+            </div>
+
+            <div class="form-group">
+              <label>Checklist Items</label>
+              <div class="pr-checklist-items" id="pr-checklist-box">
+                ${template.checklist.map((item, idx) => `
+                  <label class="pr-check-label">
+                    <input type="checkbox" class="pr-check-cb" data-idx="${idx}" ${item.checked ? 'checked' : ''} />
+                    <span>${escapeHtml(item.text)}</span>
+                  </label>
+                `).join('')}
+              </div>
+            </div>
+
+            <div class="form-group">
+              <div class="raw-toggle-header">
+                <label for="pr-raw-markdown">Direct Markdown Editor</label>
+                <button class="text-btn btn-xs" id="pr-reset-fields-btn" type="button">Reset to Template</button>
+              </div>
+              <textarea id="pr-raw-markdown" class="form-control raw-md-box" rows="8"></textarea>
+            </div>
+          </form>
+        </div>
+
+        <!-- Right: Live Preview & Copy -->
+        <div class="pr-preview-pane card">
+          <div class="pane-header">
+            <h3>GitHub Markdown Preview</h3>
+            <div class="preview-actions">
+              <button class="primary-btn btn-sm" id="pr-copy-md-btn" type="button">
+                <svg class="icon-svg" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                <span>Copy Markdown</span>
+              </button>
+              <button class="secondary-btn btn-sm" id="pr-download-md-btn" type="button" title="Download PULL_REQUEST.md">
+                <svg class="icon-svg" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                <span>Download .md</span>
+              </button>
+            </div>
+          </div>
+          <div class="markdown-preview-body" id="pr-rendered-preview"></div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  // Sync logic
+  const titleInput = container.querySelector('#pr-title-input');
+  const issueInput = container.querySelector('#pr-issue-input');
+  const typeSelect = container.querySelector('#pr-type-select');
+  const summaryArea = container.querySelector('#pr-summary-textarea');
+  const testingArea = container.querySelector('#pr-testing-textarea');
+  const rawTextarea = container.querySelector('#pr-raw-markdown');
+  const previewBody = container.querySelector('#pr-rendered-preview');
+
+  function buildMarkdownFromFields() {
+    const title = titleInput.value.trim() || 'Pull Request';
+    const issueRef = issueInput.value.trim();
+    const changeType = typeSelect.value;
+    const summary = summaryArea.value.trim();
+    const testing = testingArea.value.trim();
+
+    const checklistChecks = container.querySelectorAll('.pr-check-cb');
+    const checklistLines = Array.from(checklistChecks).map((cb) => {
+      const text = cb.nextElementSibling.textContent.trim();
+      return `- [${cb.checked ? 'x' : ' '}] ${text}`;
+    }).join('\n');
+
+    let issueSection = '';
+    if (issueRef) {
+      if (issueRef.startsWith('http')) {
+        issueSection = `Fixes ${issueRef}`;
+      } else if (issueRef.startsWith('#')) {
+        issueSection = `Fixes ${issueRef}`;
+      } else {
+        issueSection = `Fixes #${issueRef}`;
+      }
+    } else {
+      issueSection = '<!-- Reference issue here, e.g. Fixes #123 -->';
+    }
+
+    return `## Description
+${summary || '<!-- Summary of changes made -->'}
+
+## Related Issue
+${issueSection}
+
+## Type of Change
+- ${changeType}
+
+## Testing Performed
+${testing || '<!-- Describe testing performed -->'}
+
+## Checklist
+${checklistLines}
+`;
+  }
+
+  function updatePreview() {
+    const md = buildMarkdownFromFields();
+    if (rawTextarea !== document.activeElement) {
+      rawTextarea.value = md;
+    }
+    renderMarkdownToHtml(md, previewBody);
+  }
+
+  // Template pills
+  container.querySelectorAll('.template-pill').forEach((pill) => {
+    pill.addEventListener('click', () => {
+      activePRTemplateKey = pill.dataset.tpl;
+      renderPRGeneratorView();
+    });
+  });
+
+  // Input listeners
+  [titleInput, issueInput, typeSelect, summaryArea, testingArea].forEach((el) => {
+    el?.addEventListener('input', updatePreview);
+  });
+  container.querySelectorAll('.pr-check-cb').forEach((cb) => {
+    cb.addEventListener('change', updatePreview);
+  });
+
+  // Raw editor listener
+  rawTextarea.addEventListener('input', () => {
+    renderMarkdownToHtml(rawTextarea.value, previewBody);
+  });
+
+  // Copy button
+  const copyBtn = container.querySelector('#pr-copy-md-btn');
+  copyBtn?.addEventListener('click', async () => {
+    const md = rawTextarea.value || buildMarkdownFromFields();
+    await copyToClipboard(md);
+    showNotice('PR Markdown copied to clipboard!', 'success');
+  });
+
+  // Download button
+  const downloadBtn = container.querySelector('#pr-download-md-btn');
+  downloadBtn?.addEventListener('click', () => {
+    const md = rawTextarea.value || buildMarkdownFromFields();
+    const blob = new Blob([md], { type: 'text/markdown;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `PULL_REQUEST-${issueNum || 'starter'}.md`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    showNotice('Downloaded PULL_REQUEST.md file.', 'success');
+  });
+
+  // Reset button
+  const resetFieldsBtn = container.querySelector('#pr-reset-fields-btn');
+  resetFieldsBtn?.addEventListener('click', () => {
+    renderPRGeneratorView();
+  });
+
+  // Initial preview render
+  updatePreview();
+}
+
+/* --- Simple, Safe Markdown Preview Renderer --- */
+function renderMarkdownToHtml(md, targetEl) {
+  if (!targetEl) return;
+  const lines = String(md || '').split('\n');
+  let html = '';
+  let inCodeBlock = false;
+  let inList = false;
+
+  lines.forEach((line) => {
+    const trimmed = line.trim();
+
+    if (trimmed.startsWith('```')) {
+      if (inCodeBlock) {
+        html += '</code></pre>';
+        inCodeBlock = false;
+      } else {
+        html += '<pre class="preview-code"><code>';
+        inCodeBlock = true;
+      }
+      return;
+    }
+
+    if (inCodeBlock) {
+      html += escapeHtml(line) + '\n';
+      return;
+    }
+
+    if (trimmed.startsWith('# ')) {
+      html += `<h1>${escapeHtml(trimmed.slice(2))}</h1>`;
+      return;
+    }
+    if (trimmed.startsWith('## ')) {
+      html += `<h2>${escapeHtml(trimmed.slice(3))}</h2>`;
+      return;
+    }
+    if (trimmed.startsWith('### ')) {
+      html += `<h3>${escapeHtml(trimmed.slice(4))}</h3>`;
+      return;
+    }
+
+    if (trimmed.startsWith('- [ ] ') || trimmed.startsWith('- [x] ')) {
+      const isChecked = trimmed.startsWith('- [x] ');
+      const text = trimmed.slice(6);
+      html += `<div class="preview-check"><input type="checkbox" disabled ${isChecked ? 'checked' : ''} /> <span>${formatInlineMd(text)}</span></div>`;
+      return;
+    }
+
+    if (trimmed.startsWith('- ') || trimmed.startsWith('* ')) {
+      html += `<li>${formatInlineMd(trimmed.slice(2))}</li>`;
+      return;
+    }
+
+    if (trimmed.startsWith('> ')) {
+      html += `<blockquote>${formatInlineMd(trimmed.slice(2))}</blockquote>`;
+      return;
+    }
+
+    if (trimmed === '') {
+      html += '<br />';
+      return;
+    }
+
+    html += `<p>${formatInlineMd(line)}</p>`;
+  });
+
+  targetEl.innerHTML = html;
+}
+
+function formatInlineMd(text) {
+  let s = escapeHtml(text);
+  // `code`
+  s = s.replace(/`([^`]+)`/g, '<code>$1</code>');
+  // **bold**
+  s = s.replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>');
+  // *italic*
+  s = s.replace(/\*([^*]+)\*/g, '<i>$1</i>');
+  // [link](url)
+  s = s.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
+  return s;
+}
+
+/* --- 6. Git Handbook View --- */
+const GIT_HANDBOOK_TOPICS = [
+  {
+    id: 'fundamentals',
+    category: 'basics',
+    title: '1. Git Fundamentals & The 4 Workspaces',
+    description: 'Understand where your files live and how Git tracks state across working directory, index, and commits.',
+    snippet: `Working Directory -> [git add] -> Staging Area (Index) -> [git commit] -> Local Repository -> [git push] -> Remote Repository`,
+    details: 'Git records snapshots, not differences. Every commit points to the tree state and parent commit hash.',
+    docsUrl: 'https://git-scm.com/book/en/v2/Getting-Started-What-is-Git%3F',
+  },
+  {
+    id: 'fork-clone',
+    category: 'basics',
+    title: '2. Forking and Cloning for Open-Source',
+    description: 'How to make a personal copy on GitHub and download it to your local machine.',
+    snippet: `git clone https://github.com/YOUR_USERNAME/REPO_NAME.git
+cd REPO_NAME
+git remote add upstream https://github.com/ORIGINAL_OWNER/REPO_NAME.git
+git remote -v`,
+    details: 'Always set the maintainer repo as `upstream` so you can pull new changes as other contributors merge PRs.',
+    docsUrl: 'https://git-scm.com/book/en/v2/Git-Basics-Working-with-Remotes',
+  },
+  {
+    id: 'branches',
+    category: 'branching',
+    title: '3. Branching & Switching Contexts',
+    description: 'Never work directly on your main branch. Create descriptive feature branches for every pull request.',
+    snippet: `git switch -c fix-issue-123-typo
+# Or legacy syntax:
+git checkout -b fix-issue-123-typo
+git branch -a`,
+    details: 'Branch names should be concise and kebab-cased: `fix-issue-number-short-desc` or `feat-login-validation`.',
+    docsUrl: 'https://git-scm.com/book/en/v2/Git-Branching-Basic-Branching-and-Merging',
+  },
+  {
+    id: 'staging-commit',
+    category: 'basics',
+    title: '4. Staging and Crafting Clean Commits',
+    description: 'Stage only files that belong to the fix. Review changes before committing.',
+    snippet: `git status
+git diff
+git add path/to/file.js
+git commit -m "fix(parser): resolve null token exception in header"`,
+    details: 'Follow the Conventional Commits format (`fix:`, `feat:`, `docs:`, `test:`) to make maintainer review easy.',
+    docsUrl: 'https://git-scm.com/book/en/v2/Git-Basics-Recording-Changes-to-the-Repository',
+  },
+  {
+    id: 'sync-upstream',
+    category: 'upstream',
+    title: '5. Syncing with Upstream (Keeping Branches Fresh)',
+    description: 'Pull latest maintainer commits into your fork before opening or updating a PR.',
+    snippet: `git fetch upstream
+git switch main
+git merge upstream/main
+git switch fix-issue-123-typo
+git rebase main`,
+    details: 'Rebasing your feature branch on `upstream/main` ensures your pull request applies cleanly with zero merge commits.',
+    docsUrl: 'https://git-scm.com/book/en/v2/Git-Branching-Rebasing',
+  },
+  {
+    id: 'push-pr',
+    category: 'collaboration',
+    title: '6. Pushing to Your Fork and Opening a PR',
+    description: 'Send your commits to your GitHub fork and open the PR.',
+    snippet: `git push -u origin fix-issue-123-typo`,
+    details: 'GitHub will display a banner with a "Compare & pull request" button immediately after pushing.',
+    docsUrl: 'https://docs.github.com/en/pull-requests/collaborating-with-pull-requests',
+  },
+  {
+    id: 'conflicts',
+    category: 'collaboration',
+    title: '7. Resolving Merge Conflicts Step-by-Step',
+    description: 'What to do when Git flags conflicting edits between your branch and upstream.',
+    snippet: `git status
+# Open conflicting files and locate markers:
+# <<<<<<< HEAD (your change)
+# =======
+# >>>>>>> upstream/main (upstream change)
+# Edit file to desired state, remove markers, then:
+git add conflicting-file.js
+git rebase --continue`,
+    details: 'Never delete conflict markers without carefully verifying which lines to keep.',
+    docsUrl: 'https://git-scm.com/book/en/v2/Git-Branching-Basic-Branching-and-Merging#_basic_merge_conflicts',
+  },
+  {
+    id: 'undoing-safe',
+    category: 'undo',
+    title: '8. Undoing Mistakes Safely',
+    description: 'Unstage files, discard local working tree edits, or revert committed mistakes.',
+    snippet: `# Unstage a file without losing edits:
+git restore --staged path/to/file.js
+
+# Discard uncommitted changes in a file:
+git restore path/to/file.js
+
+# Create a new commit that safely inverts a previous commit:
+git revert COMMIT_HASH`,
+    details: '`git revert` is the safest way to undo a commit in a shared branch because it preserves linear history.',
+    docsUrl: 'https://git-scm.com/book/en/v2/Git-Basics-Undoing-Things',
+  },
+  {
+    id: 'stashing',
+    category: 'basics',
+    title: '9. Stashing Work in Progress',
+    description: 'Temporarily shelve changes without committing so you can switch branches.',
+    snippet: `git stash push -m "WIP on table layout"
+git switch main
+# Later, return to your branch and restore:
+git switch fix-issue-123-typo
+git stash pop`,
+    details: 'Use `git stash list` to inspect saved stashes.',
+    docsUrl: 'https://git-scm.com/book/en/v2/Git-Tools-Stashing-and-Cleaning',
+  },
+  {
+    id: 'amend-commits',
+    category: 'undo',
+    title: '10. Amending the Most Recent Commit',
+    description: 'Fix typos or add a missed file to your latest unpushed commit.',
+    snippet: `git add missed-file.js
+git commit --amend --no-edit`,
+    details: 'Only amend commits that have not been pushed to a public shared branch.',
+    docsUrl: 'https://git-scm.com/book/en/v2/Git-Basics-Undoing-Things#_changing_your_last_commit',
+  },
+  {
+    id: 'git-config',
+    category: 'basics',
+    title: '11. Recommended Git Configuration & Aliases',
+    description: 'Essential global settings for consistent author identity and faster workflows.',
+    snippet: `git config --global user.name "Your Name"
+git config --global user.email "your.email@example.com"
+git config --global init.defaultBranch main
+git config --global pull.rebase true`,
+    details: 'Ensure your Git author email matches the primary email on your GitHub account so commits are attributed to your profile.',
+    docsUrl: 'https://git-scm.com/book/en/v2/Customizing-Git-Git-Configuration',
+  },
+  {
+    id: 'danger-zone',
+    category: 'danger',
+    title: '12. Danger Zone: Destructive Commands & Warnings',
+    description: 'Commands that can permanently delete uncommitted code or rewrite published history.',
+    snippet: `# DANGER: Irreversibly deletes uncommitted edits in working directory!
+git reset --hard HEAD
+
+# DANGER: Deletes all untracked files and directories!
+git clean -fd
+
+# DANGER: Overwrites remote repository history!
+git push --force`,
+    details: 'Never run `git reset --hard` or `git clean -fd` if you have uncommitted changes you care about. Instead of `push --force`, use `git push --force-with-lease` if force-pushing is strictly necessary.',
+    isDestructive: true,
+    docsUrl: 'https://git-scm.com/book/en/v2/Git-Tools-Reset-Demystified',
+  },
+];
+
+let activeHandbookCategory = 'all';
+let handbookSearchQuery = '';
+
+function renderGitHandbookView() {
+  const container = document.querySelector('#view-handbook');
+  if (!container) return;
+
+  const filtered = GIT_HANDBOOK_TOPICS.filter((t) => {
+    const matchesCat = activeHandbookCategory === 'all' || t.category === activeHandbookCategory;
+    const q = handbookSearchQuery.toLowerCase().trim();
+    const matchesQuery = !q || t.title.toLowerCase().includes(q) || t.description.toLowerCase().includes(q) || t.snippet.toLowerCase().includes(q);
+    return matchesCat && matchesQuery;
+  });
+
+  container.innerHTML = `
+    <div class="handbook-container">
+      <header class="handbook-header card">
+        <h1>Git Handbook for Open-Source Contributors</h1>
+        <p>A reference guide covering Git workflows from forking to resolving merge conflicts and undoing mistakes safely.</p>
+        
+        <!-- Search and Category Filters -->
+        <div class="handbook-controls">
+          <div class="search-input-wrap">
+            <svg class="search-icon" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <input type="search" id="handbook-search-input" class="search-input" placeholder="Search commands, conflicts, undo..." value="${escapeHtml(handbookSearchQuery)}" />
+          </div>
+          <div class="category-pills">
+            ${[
+              { id: 'all', label: 'All Topics' },
+              { id: 'basics', label: 'Basics & Setup' },
+              { id: 'branching', label: 'Branching' },
+              { id: 'upstream', label: 'Sync Upstream' },
+              { id: 'collaboration', label: 'PRs & Conflicts' },
+              { id: 'undo', label: 'Undoing Safely' },
+              { id: 'danger', label: 'Danger Zone' },
+            ].map((c) => `
+              <button class="cat-pill ${c.id === activeHandbookCategory ? 'active' : ''}" type="button" data-cat="${c.id}">
+                ${c.label}
+              </button>
+            `).join('')}
+          </div>
+        </div>
+      </header>
+
+      <!-- Topic Cards -->
+      <div class="handbook-cards-grid">
+        ${filtered.length > 0 ? filtered.map((t) => `
+          <article class="handbook-card card ${t.isDestructive ? 'destructive-card' : ''}">
+            <div class="card-topline">
+              <span class="category-tag ${t.category}">${escapeHtml(t.category.toUpperCase())}</span>
+              ${t.isDestructive ? '<span class="danger-badge">CAUTION: DESTRUCTIVE</span>' : ''}
+            </div>
+            <h3>${escapeHtml(t.title)}</h3>
+            <p class="topic-desc">${escapeHtml(t.description)}</p>
+            
+            <div class="code-snippet-box">
+              <div class="snippet-header">
+                <span>Terminal</span>
+                <button class="copy-btn btn-xs" type="button" data-copy="${escapeHtml(t.snippet)}">Copy</button>
+              </div>
+              <pre class="code-block"><code>${escapeHtml(t.snippet)}</code></pre>
+            </div>
+
+            <p class="topic-details">${escapeHtml(t.details)}</p>
+
+            <div class="card-footer">
+              <a class="docs-link" href="${t.docsUrl}" target="_blank" rel="noopener noreferrer">
+                <span>Official Git Documentation</span>
+                <svg class="icon-svg" viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+              </a>
+            </div>
+          </article>
+        `).join('') : `
+          <div class="no-topics-found card">
+            <p>No handbook topics found matching "${escapeHtml(handbookSearchQuery)}".</p>
+            <button class="secondary-btn btn-sm" type="button" onclick="handbookSearchQuery=''; activeHandbookCategory='all'; renderGitHandbookView();">Reset filters</button>
+          </div>
+        `}
+      </div>
+    </div>
+  `;
+
+  const searchInput = container.querySelector('#handbook-search-input');
+  if (searchInput) {
+    searchInput.addEventListener('input', (e) => {
+      handbookSearchQuery = e.target.value;
+      renderGitHandbookView();
+    });
+  }
+
+  container.querySelectorAll('.cat-pill').forEach((pill) => {
+    pill.addEventListener('click', () => {
+      activeHandbookCategory = pill.dataset.cat;
+      renderGitHandbookView();
+    });
+  });
+
+  container.querySelectorAll('.copy-btn[data-copy]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      await copyToClipboard(btn.dataset.copy);
+      showNotice('Copied command to clipboard.', 'success');
+    });
+  });
+}
+
+/* --- 7. GitHub Live Stream View --- */
+function startStreamPolling() {
+  if (streamPollingTimer) return;
+  fetchLiveStreamEvents();
+  streamPollingTimer = setInterval(() => {
+    if (!streamIsPaused && document.visibilityState === 'visible') {
+      fetchLiveStreamEvents(true);
+    }
+  }, 45000);
+}
+
+function stopStreamPolling() {
+  if (streamPollingTimer) {
+    clearInterval(streamPollingTimer);
+    streamPollingTimer = null;
+  }
+}
+
+async function fetchLiveStreamEvents(isBackground = false) {
+  const container = document.querySelector('#view-stream');
+  const refreshBtn = container?.querySelector('#stream-refresh-btn');
+  if (refreshBtn) refreshBtn.classList.add('spinning');
+
+  try {
+    const res = await fetch('/api/stream');
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    const events = Array.isArray(data.events) ? data.events : [];
+    
+    // Mark newly arrived events
+    events.forEach((ev) => {
+      if (!seenStreamEventIds.has(ev.id)) {
+        ev.isNew = seenStreamEventIds.size > 0;
+        seenStreamEventIds.add(ev.id);
+      }
+    });
+
+    streamLastFetchedEvents = events;
+    renderStreamEvents(data);
+  } catch (err) {
+    if (!isBackground) {
+      renderStreamError(err.message);
+    }
+  } finally {
+    if (refreshBtn) refreshBtn.classList.remove('spinning');
+  }
+}
+
+function renderStreamEvents(meta = {}) {
+  const container = document.querySelector('#view-stream');
+  if (!container) return;
+
+  const events = streamLastFetchedEvents;
+  const isFallback = Boolean(meta.isFallback);
+  const rateLimitRemaining = meta.rateLimitRemaining ?? '—';
+  const lastUpdated = new Date().toLocaleTimeString();
+
+  container.innerHTML = `
+    <div class="stream-container">
+      <header class="stream-header card">
+        <div class="stream-title-row">
+          <div class="title-with-pulse">
+            <span class="live-pulse-dot ${streamIsPaused ? 'paused' : ''}"></span>
+            <h2>GitHub Live Activity Stream</h2>
+          </div>
+          <div class="stream-top-actions">
+            <button class="secondary-btn btn-sm" id="stream-pause-btn" type="button">
+              ${streamIsPaused ? 'Resume Stream' : 'Pause Stream'}
+            </button>
+            <button class="primary-btn btn-sm" id="stream-refresh-btn" type="button">
+              <svg class="icon-svg" viewBox="0 0 24 24"><path d="M23 4v6h-6"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+              <span>Refresh Now</span>
+            </button>
+          </div>
+        </div>
+
+        <p>Live stream of recent open-source public events across GitHub repositories. Real activity from GitHub API with intelligent 60s caching.</p>
+
+        <!-- Status strip -->
+        <div class="stream-status-strip">
+          <span class="status-item"><b>Events:</b> ${events.length}</span>
+          <span class="status-item"><b>Last Updated:</b> ${lastUpdated}</span>
+          <span class="status-item"><b>API Remaining:</b> ${rateLimitRemaining}</span>
+          ${isFallback ? '<span class="status-item fallback-warning">Cached / Sample Feed (GitHub rate limit reached)</span>' : '<span class="status-item live-indicator">● Live GitHub Stream</span>'}
+        </div>
+      </header>
+
+      <!-- Events List -->
+      <div class="stream-events-feed">
+        ${events.length > 0 ? events.map((ev) => `
+          <article class="stream-event-card card ${ev.isNew ? 'event-new' : ''}">
+            <div class="event-header">
+              <div class="event-actor">
+                ${ev.actorAvatar ? `<img class="actor-avatar" src="${escapeHtml(ev.actorAvatar)}" alt="" loading="lazy" />` : ''}
+                <span class="actor-name">${escapeHtml(ev.actor || 'Contributor')}</span>
+              </div>
+              <div class="event-meta">
+                <span class="event-type-badge ${escapeHtml(ev.type)}">${escapeHtml(formatEventType(ev.type))}</span>
+                <time class="event-time" title="${escapeHtml(ev.createdAt)}">${formatRelativeTime(ev.createdAt)}</time>
+                ${ev.isNew ? '<span class="new-pill">NEW</span>' : ''}
+              </div>
+            </div>
+            
+            <div class="event-body">
+              <div class="event-repo-link">
+                <svg class="icon-svg" viewBox="0 0 24 24"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+                <a href="${escapeHtml(ev.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(ev.repo)}</a>
+              </div>
+              ${ev.snippet ? `<p class="event-snippet">${escapeHtml(ev.snippet)}</p>` : ''}
+            </div>
+
+            <div class="event-card-actions">
+              <a class="open-link" href="${escapeHtml(ev.url)}" target="_blank" rel="noopener noreferrer">
+                <span>View on GitHub</span>
+                <svg class="icon-svg" viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+              </a>
+            </div>
+          </article>
+        `).join('') : `
+          <div class="stream-empty card">
+            <p>No recent public events recorded in the stream right now. Click "Refresh Now" to query GitHub API.</p>
+          </div>
+        `}
+      </div>
+    </div>
+  `;
+
+  // Listeners
+  const refreshBtn = container.querySelector('#stream-refresh-btn');
+  refreshBtn?.addEventListener('click', () => {
+    fetchLiveStreamEvents(false);
+  });
+
+  const pauseBtn = container.querySelector('#stream-pause-btn');
+  pauseBtn?.addEventListener('click', () => {
+    streamIsPaused = !streamIsPaused;
+    showNotice(streamIsPaused ? 'Stream paused.' : 'Stream resumed.', 'info');
+    renderStreamEvents(meta);
+  });
+}
+
+function renderStreamError(errorMsg) {
+  const container = document.querySelector('#view-stream');
+  if (!container) return;
+  container.innerHTML = `
+    <div class="stream-error-box card">
+      <h3>Live Stream Unavailable</h3>
+      <p>Could not fetch GitHub activity stream: <code>${escapeHtml(errorMsg)}</code></p>
+      <button class="primary-btn btn-sm" type="button" onclick="fetchLiveStreamEvents(false)">Retry Connection</button>
+    </div>
+  `;
+}
+
+function formatEventType(type) {
+  switch (type) {
+    case 'IssuesEvent': return 'Issue Updated';
+    case 'PullRequestEvent': return 'Pull Request';
+    case 'WatchEvent': return 'Starred Repo';
+    case 'PushEvent': return 'Pushed Code';
+    case 'ForkEvent': return 'Forked Repo';
+    default: return type.replace('Event', '') || 'Activity';
+  }
+}
+
+function formatRelativeTime(dateString) {
+  if (!dateString) return 'recently';
+  const diffSec = Math.floor((Date.now() - new Date(dateString).getTime()) / 1000);
+  if (diffSec < 60) return `${diffSec}s ago`;
+  const diffMin = Math.floor(diffSec / 60);
+  if (diffMin < 60) return `${diffMin}m ago`;
+  const diffHr = Math.floor(diffMin / 60);
+  if (diffHr < 24) return `${diffHr}h ago`;
+  return `${Math.floor(diffHr / 24)}d ago`;
+}
+
+/* --- 8. My Picks View --- */
+function renderPicksView() {
+  const container = document.querySelector('#view-picks');
+  if (!container) return;
+
+  const picks = Object.values(chosenIssues);
+
+  container.innerHTML = `
+    <div class="picks-container">
+      <header class="picks-header card">
+        <div class="picks-header-top">
+          <div>
+            <h2>My Saved Picks (${picks.length})</h2>
+            <p>Your curated shortlist of starter issues. Saved issues influence future search ranking by prioritizing matching skills and repository patterns.</p>
+          </div>
+          <div class="picks-header-actions">
+            ${picks.length > 0 ? `
+              <button class="primary-btn btn-sm" id="picks-export-btn" type="button">
+                <svg class="icon-svg" viewBox="0 0 24 24"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg>
+                <span>Export Plan</span>
+              </button>
+              <button class="secondary-btn btn-sm" id="picks-clear-btn" type="button">Clear All</button>
+            ` : ''}
+          </div>
+        </div>
+
+        <div class="picks-privacy-callout">
+          <svg class="icon-svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+          <span><b>Local Browser Storage:</b> Your picks are saved locally in this browser (${picks.length}/50 items). No external account or personal data collection is required.</span>
+        </div>
+      </header>
+
+      <!-- Picks Grid -->
+      <div class="picks-grid">
+        ${picks.length > 0 ? picks.map((p) => {
+          const diffBadge = renderDifficultyBadge(p.difficulty);
+          const issueId = String(p.id || '');
+          const score = typeof p.score === 'number' ? `Fit Score: ${p.score}` : '';
+
+          return `
+            <article class="pick-card card" data-issue-id="${issueId}">
+              <div class="pick-card-top">
+                <span class="repo-badge">${escapeHtml(p.repository || 'Repository')}</span>
+                <div class="pick-badges">
+                  ${score ? `<span class="score">${score}</span>` : ''}
+                  ${diffBadge}
+                </div>
+              </div>
+
+              <h3 class="pick-card-title">
+                <a href="${escapeHtml(p.url || '#')}" target="_blank" rel="noopener noreferrer">${escapeHtml(p.title || 'Issue')}</a>
+              </h3>
+
+              ${Array.isArray(p.matchedSkills) && p.matchedSkills.length > 0 ? `
+                <div class="matched-skills-chips">
+                  ${p.matchedSkills.map((s) => `<span class="skill-chip">${escapeHtml(s)}</span>`).join('')}
+                </div>
+              ` : ''}
+
+              <div class="pick-card-actions">
+                <button class="primary-btn btn-sm" data-pick-action="blueprint" data-issue-id="${issueId}" type="button">
+                  <svg class="icon-svg" viewBox="0 0 24 24"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
+                  <span>Fix Blueprint</span>
+                </button>
+                <button class="secondary-btn btn-sm" data-pick-action="pr-gen" data-issue-id="${issueId}" type="button">
+                  <svg class="icon-svg" viewBox="0 0 24 24"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M13 6h3a2 2 0 0 1 2 2v7"/><line x1="6" y1="9" x2="6" y2="21"/></svg>
+                  <span>PR Gen</span>
+                </button>
+                <button class="text-btn btn-sm remove-pick-btn" data-pick-action="remove" data-issue-id="${issueId}" type="button" title="Remove from picks">
+                  Remove
+                </button>
+              </div>
+            </article>
+          `;
+        }).join('') : `
+          <div class="picks-empty card">
+            <svg class="empty-icon" viewBox="0 0 24 24"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
+            <h3>No Issues Saved Yet</h3>
+            <p>Click the "Pick" button on any issue in the search results to save it here for later.</p>
+            <button class="primary-btn" type="button" onclick="switchAppView('find')">Discover Issues</button>
+          </div>
+        `}
+      </div>
+    </div>
+  `;
+
+  // Attach action handlers
+  container.querySelectorAll('[data-pick-action]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const action = btn.dataset.pickAction;
+      const id = btn.dataset.issueId;
+      const issue = chosenIssues[id] || findIssueById(id);
+
+      if (action === 'blueprint' && issue) {
+        setSelectedIssue(issue, 'blueprint');
+      } else if (action === 'pr-gen' && issue) {
+        setSelectedIssue(issue, 'pr-gen');
+      } else if (action === 'remove' && issue) {
+        delete chosenIssues[id];
+        saveChosenIssues();
+        updatePickButtons();
+        renderPicksView();
+        showNotice('Removed issue from your picks.', 'info');
+      }
+    });
+  });
+
+  const exportBtn = container.querySelector('#picks-export-btn');
+  exportBtn?.addEventListener('click', async () => {
+    const md = generateContributionPlanMarkdown();
+    if (!md) return;
+    await copyToClipboard(md);
+    const blob = new Blob([md], { type: 'text/markdown;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'issuescout-starter-plan.md';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    showNotice('Exported contribution plan (downloaded and copied to clipboard)!', 'success');
+  });
+
+  const clearBtn = container.querySelector('#picks-clear-btn');
+  clearBtn?.addEventListener('click', () => {
+    if (confirm(`Remove all ${picks.length} saved picks?`)) {
+      chosenIssues = {};
+      saveChosenIssues();
+      updatePickButtons();
+      renderPicksView();
+      showNotice('Cleared all saved picks.', 'info');
+    }
+  });
+}
+
+/* --- Clipboard Helper --- */
+async function copyToClipboard(text) {
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch {}
+  // Fallback
+  const ta = document.createElement('textarea');
+  ta.value = text;
+  ta.style.position = 'fixed';
+  ta.style.left = '-9999px';
+  document.body.appendChild(ta);
+  ta.select();
+  try {
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+    return true;
+  } catch {
+    document.body.removeChild(ta);
+    return false;
+  }
+}
+
+// Global initialization
+document.addEventListener('DOMContentLoaded', () => {
+  initTheme();
+  initAppRouting();
+  updatePickButtons();
+});
+
+// If DOM is already loaded
+if (document.readyState === 'complete' || document.readyState === 'interactive') {
+  initTheme();
+  initAppRouting();
+  updatePickButtons();
+}
+

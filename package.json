@@ -1,0 +1,26 @@
+{
+  "name": "issuescout",
+  "version": "1.0.0",
+  "description": "IssueScout helps first-time open-source contributors find starter issues matched to their skills using local AI and verified GitHub signals.",
+  "type": "module",
+  "main": "server.mjs",
+  "scripts": {
+    "start": "node server.mjs",
+    "dev": "node --watch server.mjs",
+    "test": "node --test test/issuescout.test.mjs"
+  },
+  "keywords": [
+    "github",
+    "open-source",
+    "starter-issues",
+    "good-first-issue",
+    "ai",
+    "ollama",
+    "hacktoberfest"
+  ],
+  "author": "IssueScout Team",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

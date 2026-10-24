@@ -1,199 +1,673 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="dark">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="theme-color" content="#0a0a0f" />
-    <meta name="description" content="IssueScout finds beginner-friendly open-source GitHub issues matched to your skills using a local AI model. Find your first contribution, fast." />
-    <title>IssueScout — find your first open-source contribution</title>
+    <meta name="description" content="IssueScout finds beginner-friendly open-source GitHub issues matched to your skills using local AI and verified GitHub signals. Find, blueprint, and prepare your first contribution." />
+    <title>IssueScout — Find, Blueprint & Ship Open Source Contributions</title>
+    <!-- Early theme initialization to eliminate theme flashing -->
+    <script>
+      (function() {
+        try {
+          var saved = localStorage.getItem('issuescout_theme');
+          var theme = saved || (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+          document.documentElement.setAttribute('data-theme', theme);
+        } catch(e) {}
+      })();
+    </script>
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body>
     <main class="shell">
+      <!-- Main Application Navigation Bar -->
       <header class="topbar">
-        <a class="brand" href="/" aria-label="IssueScout home">
-          <span class="brand-mark">↗</span>
-          IssueScout
-        </a>
-        <div class="top-meta">
-          <span class="live-dot"></span>
-          <span id="model-status">Connecting to local AI…</span>
+        <div class="topbar-left">
+          <a class="brand" href="#find" aria-label="IssueScout home">
+            <span class="brand-mark">↗</span>
+            <span class="brand-name">IssueScout</span>
+          </a>
+          <nav class="main-nav" aria-label="Primary navigation">
+            <button class="nav-tab active" data-nav="find" type="button" aria-selected="true" role="tab">
+              <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              <span>Find Issues</span>
+            </button>
+            <button class="nav-tab" data-nav="blueprint" type="button" aria-selected="false" role="tab">
+              <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
+              <span>Fix Blueprint</span>
+            </button>
+            <button class="nav-tab" data-nav="pr-gen" type="button" aria-selected="false" role="tab">
+              <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M13 6h3a2 2 0 0 1 2 2v7"/><line x1="6" y1="9" x2="6" y2="21"/></svg>
+              <span>PR Generator</span>
+            </button>
+            <button class="nav-tab" data-nav="handbook" type="button" aria-selected="false" role="tab">
+              <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+              <span>Git Handbook</span>
+            </button>
+            <button class="nav-tab" data-nav="stream" type="button" aria-selected="false" role="tab">
+              <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="2"/><path d="M16.24 7.76a6 6 0 0 1 0 8.49m-8.48-.01a6 6 0 0 1 0-8.49m11.31-2.82a10 10 0 0 1 0 14.14m-14.14 0a10 10 0 0 1 0-14.14"/></svg>
+              <span>Live Stream</span>
+            </button>
+            <button class="nav-tab" data-nav="picks" type="button" aria-selected="false" role="tab">
+              <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
+              <span>My Picks</span>
+              <span class="nav-picks-badge" id="nav-picks-count">0</span>
+            </button>
+          </nav>
+        </div>
+        <div class="topbar-right">
+          <div class="top-meta">
+            <span class="live-dot" id="live-dot"></span>
+            <span id="model-status">Connecting to local AI…</span>
+          </div>
+          <button id="theme-toggle" class="theme-toggle-btn" type="button" aria-label="Toggle light and dark theme" title="Toggle theme">
+            <svg class="icon-svg theme-icon-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+            <svg class="icon-svg theme-icon-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+          </button>
         </div>
       </header>
 
-      <section class="hero">
-        <div class="eyebrow">
-          <span>HACKTOBERFEST 2026</span>
-          <span class="eyebrow-line"></span>
-          <span>OPEN SOURCE · START HERE</span>
-        </div>
-        <h1>Your first contribution<br />starts with <span>the right issue.</span></h1>
-        <p class="hero-copy">Tell us what you know. IssueScout finds open starter issues and uses a local AI model to explain which ones fit you best.</p>
-      </section>
+      <!-- ═══════════════════════════════════════════════════
+           VIEW 1: FIND ISSUES
+           ═══════════════════════════════════════════════════ -->
+      <div id="view-find" class="view-panel active">
+        <section class="hero">
+          <div class="eyebrow">
+            <span>OPEN SOURCE · HACKTOBERFEST 2026</span>
+            <span class="eyebrow-line"></span>
+            <span>FIND · BLUEPRINT · SHIP</span>
+          </div>
+          <h1>Your first contribution<br />starts with <span>the right issue.</span></h1>
+          <p class="hero-copy">Tell us what you know. IssueScout finds open starter issues, explains fit transparently using evidence-grounded AI, and guides your first pull request from fork to merge.</p>
+        </section>
 
-      <section class="search-panel" aria-labelledby="search-heading">
-        <div class="panel-heading">
-          <div>
-            <div class="step-label">01 / YOUR STARTING POINT</div>
-            <h2 id="search-heading">What can you work with?</h2>
+        <section class="search-panel" aria-labelledby="search-heading">
+          <div class="panel-heading">
+            <div>
+              <div class="step-label">01 / YOUR SKILLSET</div>
+              <h2 id="search-heading">What can you work with?</h2>
+            </div>
+            <div class="ai-chip">
+              <span>✳</span> LOCAL AI MATCHING
+            </div>
           </div>
-          <div class="ai-chip">
-            <span>✳</span> LOCAL AI MATCHING
-          </div>
-        </div>
-        <form id="search-form">
-          <label for="skills">Skills and tools</label>
-          <div class="input-row">
-            <input id="skills" name="skills" autocomplete="off" value="JavaScript, React, CSS"
-              placeholder="e.g. Python, design, documentation" required />
-            <button type="submit" id="find-button">
-              <span>Find issues</span>
-              <span class="button-arrow">
-                <svg class="icon-svg" viewBox="0 0 24 24" style="width:14px;height:14px">
-                  <line x1="5" y1="12" x2="19" y2="12"/>
-                  <polyline points="12 5 19 12 12 19"/>
+          <form id="search-form">
+            <label for="skills">Skills and tools</label>
+            <div class="input-row">
+              <input id="skills" name="skills" autocomplete="off" value="JavaScript, React, CSS"
+                placeholder="e.g. Python, design, documentation, TypeScript" required />
+              <button type="submit" id="find-button">
+                <span>Find issues</span>
+                <span class="button-arrow">
+                  <svg class="icon-svg" viewBox="0 0 24 24" style="width:14px;height:14px">
+                    <line x1="5" y1="12" x2="19" y2="12"/>
+                    <polyline points="12 5 19 12 12 19"/>
+                  </svg>
+                </span>
+              </button>
+            </div>
+            <div class="helper-row">
+              <span>Separate skills with commas</span>
+              <span>Searching open GitHub issues</span>
+            </div>
+            <div class="preset-chips">
+              <span class="preset-label">Quick try:</span>
+              <button type="button" class="chip" data-skills="JavaScript, React, CSS" data-tech="React">JavaScript + React</button>
+              <button type="button" class="chip" data-skills="Python, Django" data-tech="Python">Python</button>
+              <button type="button" class="chip" data-skills="TypeScript, Node.js" data-tech="TypeScript">TypeScript</button>
+              <button type="button" class="chip" data-skills="HTML, CSS, UI" data-tech="CSS">CSS / UI</button>
+              <button type="button" class="chip" data-skills="Go, Rust" data-tech="Go">Go / Rust</button>
+            </div>
+            <div class="technology-focus">
+              <label for="technologies">Technology focus <span>(optional)</span></label>
+              <input id="technologies" name="technologies" autocomplete="off" placeholder="e.g. TypeScript, React, Python" />
+              <span class="filter-hint">Filters candidates by repository language or title keywords before ranking.</span>
+            </div>
+          </form>
+        </section>
+
+        <section class="results-section" aria-live="polite">
+          <div class="results-header">
+            <div>
+              <div class="step-label">02 / DISCOVER & PROGRESS</div>
+              <div class="view-switch-row">
+                <h2 id="results-heading">Recommended starter issues</h2>
+                <div class="view-tabs" role="tablist" aria-label="Contribution view switcher">
+                  <button id="view-tab-shortlist" class="view-tab active" role="tab" aria-selected="true" type="button">
+                    <svg class="icon-svg" viewBox="0 0 24 24"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+                    <span>Shortlist</span>
+                  </button>
+                  <button id="view-tab-learning" class="view-tab" role="tab" aria-selected="false" type="button">
+                    <svg class="icon-svg" viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+                    <span>Learning Path</span>
+                    <span class="learning-pill-indicator" id="learning-stage-indicator">Stage 1</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+            <div class="results-meta">
+              <button id="export-plan" class="export-plan-button" type="button" hidden>
+                <svg class="icon-svg" viewBox="0 0 24 24">
+                  <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>
+                  <rect x="8" y="2" width="8" height="4" rx="1" ry="1"/>
                 </svg>
-              </span>
-            </button>
+                <span>Export plan</span>
+              </button>
+              <button id="clear-picks" class="clear-picks-button" type="button" hidden>Clear picks (0)</button>
+              <span class="result-count" id="result-count">—</span>
+            </div>
           </div>
-          <div class="helper-row">
-            <span>Separate skills with commas</span>
-            <span>Searching GitHub starter issues</span>
-          </div>
-          <div class="preset-chips">
-            <span class="preset-label">Quick try:</span>
-            <button type="button" class="chip" data-skills="JavaScript, React, CSS" data-tech="React">JavaScript + React</button>
-            <button type="button" class="chip" data-skills="Python, Django" data-tech="Python">Python</button>
-            <button type="button" class="chip" data-skills="TypeScript, Node.js" data-tech="TypeScript">TypeScript</button>
-            <button type="button" class="chip" data-skills="HTML, CSS, UI" data-tech="CSS">CSS / UI</button>
-            <button type="button" class="chip" data-skills="Go, Rust" data-tech="Go">Go / Rust</button>
-          </div>
-          <div class="technology-focus">
-            <label for="technologies">Technology focus <span>(optional)</span></label>
-            <input id="technologies" name="technologies" autocomplete="off" placeholder="e.g. TypeScript, React" />
-            <span class="filter-hint">Show issues that mention at least one technology in the title, description, labels, or repository.</span>
-          </div>
-        </form>
-      </section>
+          <p class="pick-privacy" id="pick-privacy-note">Your picks stay in this browser and help prioritize similar issues next time.</p>
 
-      <section class="results-section" aria-live="polite">
-        <div class="results-header">
-          <div>
-            <div class="step-label">02 / DISCOVER & PROGRESS</div>
-            <div class="view-switch-row">
-              <h2 id="results-heading">Good issues to start with</h2>
-              <div class="view-tabs" role="tablist" aria-label="Contribution view switcher">
-                <button id="view-tab-shortlist" class="view-tab active" role="tab" aria-selected="true" type="button">
-                  <svg class="icon-svg" viewBox="0 0 24 24"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
-                  <span>Shortlist</span>
+          <!-- Personalized Learning Path Dashboard (active in learning view) -->
+          <div class="learning-path-panel" id="learning-path-panel" hidden>
+            <div class="learning-path-header">
+              <div class="learning-path-titles">
+                <span class="learning-eyebrow">PROGRESSIVE CONTRIBUTION ROADMAP</span>
+                <h3>Personalized Learning Path</h3>
+                <p class="learning-desc">Advance through three progressive contribution stages based on your current skills, goals, and demonstrated PR progress.</p>
+              </div>
+              <div class="learning-goal-control">
+                <label for="learning-goal-select">My Target Goal:</label>
+                <select id="learning-goal-select" class="learning-goal-dropdown">
+                  <option value="first-pr">🎯 Stage 1: Make my 1st Pull Request</option>
+                  <option value="logic-tests">🚀 Stage 2: Feature Logic & Testing</option>
+                  <option value="architecture">⚡ Stage 3: Architecture & System Impact</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- Stage Navigation Pills (Beginner / Intermediate / Advanced) -->
+            <div class="learning-stages-bar" role="tablist" aria-label="Learning stages">
+              <button class="stage-btn active" data-stage="beginner" type="button" role="tab" aria-selected="true">
+                <span class="stage-number">01</span>
+                <div class="stage-info">
+                  <span class="stage-name">Beginner Stage</span>
+                  <span class="stage-sub">First PRs · Small Scopes</span>
+                </div>
+              </button>
+              <button class="stage-btn" data-stage="intermediate" type="button" role="tab" aria-selected="false">
+                <span class="stage-number">02</span>
+                <div class="stage-info">
+                  <span class="stage-name">Intermediate Stage</span>
+                  <span class="stage-sub">Feature Logic · Unit Tests</span>
+                </div>
+              </button>
+              <button class="stage-btn" data-stage="advanced" type="button" role="tab" aria-selected="false">
+                <span class="stage-number">03</span>
+                <div class="stage-info">
+                  <span class="stage-name">Advanced Stage</span>
+                  <span class="stage-sub">Refactoring · Architecture</span>
+                </div>
+              </button>
+            </div>
+
+            <!-- Progress signals banner without false mastery claims -->
+            <div class="learning-progress-banner" id="learning-progress-banner"></div>
+          </div>
+
+          <!-- Difficulty filter bar -->
+          <div class="difficulty-filter" id="difficulty-filter" hidden>
+            <span class="filter-label" id="diff-filter-label">Difficulty Level:</span>
+            <div class="difficulty-pills" role="radiogroup" aria-labelledby="diff-filter-label">
+              <button class="diff-pill active" data-level="all" type="button" role="radio" aria-checked="true" tabindex="0">All Levels</button>
+              <button class="diff-pill beginner" data-level="beginner" type="button" role="radio" aria-checked="false" tabindex="-1">
+                <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.22 4.22l2.12 2.12M17.66 17.66l2.12 2.12M2 12h3M19 12h3M4.22 19.78l2.12-2.12M17.66 6.34l2.12-2.12"/></svg>
+                Beginner
+              </button>
+              <button class="diff-pill intermediate" data-level="intermediate" type="button" role="radio" aria-checked="false" tabindex="-1">
+                <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+                Intermediate
+              </button>
+              <button class="diff-pill advanced" data-level="advanced" type="button" role="radio" aria-checked="false" tabindex="-1">
+                <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+                Advanced
+              </button>
+            </div>
+            <button id="diff-reset" class="diff-filter-reset" type="button" title="Reset difficulty filter to All Levels" aria-label="Reset difficulty filter to All Levels" hidden>
+              <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg>
+              <span>Reset</span>
+            </button>
+            <span class="diff-count" id="diff-count" aria-live="polite"></span>
+          </div>
+
+          <div id="notice" class="notice" hidden></div>
+          <div id="results" class="results-grid">
+            <div class="empty-state">
+              <div class="empty-icon">⌕</div>
+              <strong>Your next open-source contribution is out there.</strong>
+              <span>Enter your skills above to find a few good places to begin.</span>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <!-- ═══════════════════════════════════════════════════
+           VIEW 2: FIX BLUEPRINT
+           ═══════════════════════════════════════════════════ -->
+      <div id="view-blueprint" class="view-panel" hidden>
+        <section class="blueprint-view-container">
+          <div class="blueprint-header-panel">
+            <div class="blueprint-title-row">
+              <div class="blueprint-eyebrow">STEP-BY-STEP CONTRIBUTION WORKFLOW</div>
+              <h2 id="blueprint-main-heading">Fix Blueprint</h2>
+              <p class="blueprint-intro">Follow this verified engineering roadmap to investigate, reproduce, implement, and open a clean pull request for your selected issue.</p>
+            </div>
+            <!-- Active Issue Card Indicator -->
+            <div class="blueprint-selected-card" id="blueprint-selected-card">
+              <!-- Populated by JavaScript -->
+            </div>
+          </div>
+
+          <!-- Blueprint Progress Bar & Checklist Summary -->
+          <div class="blueprint-progress-box">
+            <div class="progress-box-top">
+              <span class="progress-label">Contribution Progress:</span>
+              <span class="progress-percent" id="blueprint-percent">0% Completed</span>
+              <button id="blueprint-reset-btn" class="blueprint-reset-btn" type="button" title="Reset checklist progress for this issue">Reset Progress</button>
+            </div>
+            <div class="blueprint-progress-bar-track">
+              <div class="blueprint-progress-bar-fill" id="blueprint-progress-fill" style="width: 0%;"></div>
+            </div>
+          </div>
+
+          <!-- Blueprint Interactive Steps Grid -->
+          <div class="blueprint-steps-list">
+            <!-- Step A: Verify & Claim -->
+            <div class="blueprint-step-card" data-step="1">
+              <div class="step-card-header">
+                <div class="step-badge">STAGE A</div>
+                <h3>1. Verify Availability & Claim the Task</h3>
+                <label class="step-check-label">
+                  <input type="checkbox" class="blueprint-check" data-step-id="claim" />
+                  <span>Mark Done</span>
+                </label>
+              </div>
+              <p class="step-desc">Before writing code, inspect recent comments on GitHub to make sure another contributor isn't actively working on it. Claiming prevents duplicate effort.</p>
+              <div class="step-guidance-box">
+                <span class="guidance-title">Maintainer Etiquette Tip:</span>
+                <p>Leave a friendly comment expressing your intent to work on the task. Never demand assignment; wait for maintainer confirmation or start local investigation immediately.</p>
+              </div>
+              <div class="code-action-box">
+                <div class="code-box-header">
+                  <span>Maintainer Comment Template (Editable):</span>
+                  <button type="button" class="copy-code-btn" id="copy-claim-comment-btn">Copy Comment</button>
+                </div>
+                <textarea id="blueprint-claim-text" class="blueprint-textarea" rows="3">Hi @maintainers! I'd love to work on this issue as a first-time contributor. Could you please assign it to me? Thank you!</textarea>
+              </div>
+            </div>
+
+            <!-- Step B: Fork & Branch Setup -->
+            <div class="blueprint-step-card" data-step="2">
+              <div class="step-card-header">
+                <div class="step-badge">STAGE B</div>
+                <h3>2. Fork Repository & Create Feature Branch</h3>
+                <label class="step-check-label">
+                  <input type="checkbox" class="blueprint-check" data-step-id="branch" />
+                  <span>Mark Done</span>
+                </label>
+              </div>
+              <p class="step-desc">Fork the project to your GitHub account. Clone your fork locally and configure the original repository as an <code>upstream</code> remote so you can stay in sync.</p>
+              <div class="user-config-row">
+                <label for="blueprint-gh-username">Your GitHub Username:</label>
+                <input id="blueprint-gh-username" class="blueprint-input" placeholder="e.g. your-username" value="contributor" />
+                <span class="user-config-hint">Commands below update automatically with your fork URL.</span>
+              </div>
+              <div class="command-block-group">
+                <div class="command-snippet">
+                  <div class="snippet-header">
+                    <span>1. Clone your fork:</span>
+                    <button type="button" class="copy-cmd-btn" data-target="cmd-clone">Copy</button>
+                  </div>
+                  <pre><code id="cmd-clone">git clone https://github.com/contributor/repo.git &amp;&amp; cd repo</code></pre>
+                </div>
+                <div class="command-snippet">
+                  <div class="snippet-header">
+                    <span>2. Add upstream remote (stays synced with main project):</span>
+                    <button type="button" class="copy-cmd-btn" data-target="cmd-upstream">Copy</button>
+                  </div>
+                  <pre><code id="cmd-upstream">git remote add upstream https://github.com/owner/repo.git</code></pre>
+                </div>
+                <div class="command-snippet">
+                  <div class="snippet-header">
+                    <span>3. Create a dedicated feature branch:</span>
+                    <button type="button" class="copy-cmd-btn" data-target="cmd-branch">Copy</button>
+                  </div>
+                  <pre><code id="cmd-branch">git switch -c fix/starter-contribution</code></pre>
+                </div>
+              </div>
+            </div>
+
+            <!-- Step C: Locate Code & Reproduce -->
+            <div class="blueprint-step-card" data-step="3">
+              <div class="step-card-header">
+                <div class="step-badge">STAGE C</div>
+                <h3>3. Locate Code &amp; Reproduce Problem</h3>
+                <label class="step-check-label">
+                  <input type="checkbox" class="blueprint-check" data-step-id="reproduce" />
+                  <span>Mark Done</span>
+                </label>
+              </div>
+              <p class="step-desc">Identify the exact files involved. Inspect the implementation and confirm the bug or missing functionality on your machine before making changes.</p>
+              <div id="blueprint-files-box" class="blueprint-files-box">
+                <!-- Dynamically populated with verified referenced files -->
+              </div>
+              <div class="reproduce-tips-box">
+                <span class="guidance-title">Investigation Checklist:</span>
+                <ul>
+                  <li>Search for unique error strings, function names, or component tags in your IDE.</li>
+                  <li>Check if reproduction steps in the issue description succeed on your clean branch.</li>
+                  <li>Verify whether the issue has existing unit tests that currently fail or need updating.</li>
+                </ul>
+              </div>
+            </div>
+
+            <!-- Step D: Run Tests & Linters -->
+            <div class="blueprint-step-card" data-step="4">
+              <div class="step-card-header">
+                <div class="step-badge">STAGE D</div>
+                <h3>4. Run Tests &amp; Linters</h3>
+                <label class="step-check-label">
+                  <input type="checkbox" class="blueprint-check" data-step-id="tests" />
+                  <span>Mark Done</span>
+                </label>
+              </div>
+              <p class="step-desc">Run the test suite locally before and after editing code. Tests are suggested based on repository files and detected toolchains.</p>
+              <div id="blueprint-test-commands" class="blueprint-test-commands">
+                <!-- Dynamically populated based on issue repository context -->
+              </div>
+              <div class="step-guidance-box">
+                <span class="guidance-title">Interpreting Test Failures:</span>
+                <p>If existing tests fail before you write code, check the repository's <code>CONTRIBUTING.md</code> for setup instructions or missing dependencies (e.g. Node version, Docker daemon, environment variables).</p>
+              </div>
+            </div>
+
+            <!-- Step E: Implement, Commit & Submit -->
+            <div class="blueprint-step-card" data-step="5">
+              <div class="step-card-header">
+                <div class="step-badge">STAGE E</div>
+                <h3>5. Implement, Review Diff &amp; Open PR</h3>
+                <label class="step-check-label">
+                  <input type="checkbox" class="blueprint-check" data-step-id="submit" />
+                  <span>Mark Done</span>
+                </label>
+              </div>
+              <p class="step-desc">Keep your change minimal and focused solely on the issue. Review your diff with <code>git diff</code>, commit with a descriptive message, push to your fork, and open the Pull Request.</p>
+              <div class="command-block-group">
+                <div class="command-snippet">
+                  <div class="snippet-header">
+                    <span>1. Inspect your changes:</span>
+                    <button type="button" class="copy-cmd-btn" data-target="cmd-diff">Copy</button>
+                  </div>
+                  <pre><code id="cmd-diff">git diff &amp;&amp; git status</code></pre>
+                </div>
+                <div class="command-snippet">
+                  <div class="snippet-header">
+                    <span>2. Commit with conventional commit format:</span>
+                    <button type="button" class="copy-cmd-btn" data-target="cmd-commit">Copy</button>
+                  </div>
+                  <pre><code id="cmd-commit">git commit -am "fix: resolve issue description (closes #1)"</code></pre>
+                </div>
+                <div class="command-snippet">
+                  <div class="snippet-header">
+                    <span>3. Push to your fork (safe destination):</span>
+                    <button type="button" class="copy-cmd-btn" data-target="cmd-push">Copy</button>
+                  </div>
+                  <pre><code id="cmd-push">git push -u origin fix/starter-contribution</code></pre>
+                </div>
+              </div>
+              <div class="blueprint-action-row">
+                <button id="blueprint-to-pr-btn" class="primary-action-btn" type="button">
+                  <svg class="icon-svg" viewBox="0 0 24 24"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M13 6h3a2 2 0 0 1 2 2v7"/><line x1="6" y1="9" x2="6" y2="21"/></svg>
+                  <span>Generate PR Description →</span>
                 </button>
-                <button id="view-tab-learning" class="view-tab" role="tab" aria-selected="false" type="button">
-                  <svg class="icon-svg" viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
-                  <span>Learning Path</span>
-                  <span class="learning-pill-indicator" id="learning-stage-indicator">Stage 1</span>
-                </button>
+                <a id="blueprint-gh-pr-link" class="secondary-action-btn" href="#" target="_blank" rel="noopener noreferrer">
+                  <span>Open PR on GitHub</span>
+                  <svg class="icon-svg" viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                </a>
               </div>
             </div>
           </div>
-          <div class="results-meta">
-            <button id="export-plan" class="export-plan-button" type="button" hidden>
-              <svg class="icon-svg" viewBox="0 0 24 24">
-                <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>
-                <rect x="8" y="2" width="8" height="4" rx="1" ry="1"/>
-              </svg>
-              <span>Export plan</span>
-            </button>
-            <button id="clear-picks" class="clear-picks-button" type="button" hidden>Clear picks (0)</button>
-            <span class="result-count" id="result-count">—</span>
-          </div>
-        </div>
-        <p class="pick-privacy" id="pick-privacy-note">Your picks stay in this browser and help move similar issues higher next time.</p>
+        </section>
+      </div>
 
-        <!-- Personalized Learning Path Dashboard (active in learning view) -->
-        <div class="learning-path-panel" id="learning-path-panel" hidden>
-          <div class="learning-path-header">
-            <div class="learning-path-titles">
-              <span class="learning-eyebrow">PROGRESSIVE CONTRIBUTION ROADMAP</span>
-              <h3>Personalized Learning Path</h3>
-              <p class="learning-desc">Advance through three progressive contribution stages based on your current skills, goals, and demonstrated PR progress.</p>
+      <!-- ═══════════════════════════════════════════════════
+           VIEW 3: PR GENERATOR
+           ═══════════════════════════════════════════════════ -->
+      <div id="view-pr-gen" class="view-panel" hidden>
+        <section class="pr-gen-container">
+          <div class="pr-gen-header">
+            <div class="step-label">PULL REQUEST GENERATOR</div>
+            <h2>Generate Structured PR Description</h2>
+            <p class="pr-gen-desc">Maintainers review dozens of PRs. A structured, evidence-backed description highlighting what changed and how you tested speeds up reviews and acceptance.</p>
+          </div>
+
+          <div class="pr-gen-grid">
+            <!-- Left: Input Form & Template Switcher -->
+            <div class="pr-form-col">
+              <div class="pr-template-bar">
+                <span class="template-label">Choose Template:</span>
+                <div class="template-buttons" role="radiogroup" aria-label="PR templates">
+                  <button type="button" class="template-btn active" data-template="bugfix">🐛 Bug Fix</button>
+                  <button type="button" class="template-btn" data-template="feature">✨ New Feature</button>
+                  <button type="button" class="template-btn" data-template="docs">📝 Documentation</button>
+                  <button type="button" class="template-btn" data-template="refactor">♻️ Refactor</button>
+                </div>
+              </div>
+
+              <form id="pr-generator-form" class="pr-form">
+                <div class="form-group">
+                  <label for="pr-title-input">PR Title</label>
+                  <input id="pr-title-input" class="pr-input" placeholder="e.g. fix: extract inline styles from auth modal into CSS" required />
+                </div>
+                <div class="form-row">
+                  <div class="form-group flex-1">
+                    <label for="pr-issue-input">Issue Reference (Number or URL)</label>
+                    <input id="pr-issue-input" class="pr-input" placeholder="e.g. #42 or https://github.com/org/repo/issues/42" />
+                  </div>
+                  <div class="form-group flex-1">
+                    <label for="pr-type-select">Type of Change</label>
+                    <select id="pr-type-select" class="pr-select">
+                      <option value="bugfix">Bug fix (non-breaking change which fixes an issue)</option>
+                      <option value="feature">New feature (non-breaking change adding functionality)</option>
+                      <option value="docs">Documentation update only</option>
+                      <option value="refactor">Code refactoring / cleanup (no functional changes)</option>
+                      <option value="breaking">Breaking change (fix or feature breaking existing usage)</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div class="form-group">
+                  <label for="pr-summary-input">Summary of Changes</label>
+                  <textarea id="pr-summary-input" class="pr-textarea" rows="4" placeholder="Describe the technical modifications made, why they were needed, and the approach taken..."></textarea>
+                </div>
+
+                <div class="form-group">
+                  <label for="pr-testing-input">Testing Performed</label>
+                  <textarea id="pr-testing-input" class="pr-textarea" rows="3" placeholder="Describe tests added, manual verification steps performed in the browser or terminal..."></textarea>
+                </div>
+
+                <div class="form-group">
+                  <span class="form-label-text">Contributor Checklist</span>
+                  <div class="pr-checklist-items">
+                    <label class="pr-check-item">
+                      <input type="checkbox" id="chk-follow-style" checked />
+                      <span>My code follows the style guidelines of this project</span>
+                    </label>
+                    <label class="pr-check-item">
+                      <input type="checkbox" id="chk-self-review" checked />
+                      <span>I have performed a self-review of my own code using <code>git diff</code></span>
+                    </label>
+                    <label class="pr-check-item">
+                      <input type="checkbox" id="chk-tests-pass" checked />
+                      <span>Existing unit and integration tests pass locally</span>
+                    </label>
+                    <label class="pr-check-item">
+                      <input type="checkbox" id="chk-docs-updated" />
+                      <span>I have updated the relevant documentation (if applicable)</span>
+                    </label>
+                  </div>
+                </div>
+              </form>
             </div>
-            <div class="learning-goal-control">
-              <label for="learning-goal-select">My Target Goal:</label>
-              <select id="learning-goal-select" class="learning-goal-dropdown">
-                <option value="first-pr">🎯 Stage 1: Make my 1st Pull Request</option>
-                <option value="logic-tests">🚀 Stage 2: Feature Logic & Testing</option>
-                <option value="architecture">⚡ Stage 3: Architecture & System Impact</option>
-              </select>
+
+            <!-- Right: Live Markdown Preview & Export -->
+            <div class="pr-preview-col">
+              <div class="preview-header">
+                <span class="preview-title">Generated GitHub Markdown:</span>
+                <div class="preview-actions">
+                  <button type="button" id="copy-pr-markdown-btn" class="primary-btn-sm">
+                    <svg class="icon-svg" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                    <span>Copy Markdown</span>
+                  </button>
+                  <button type="button" id="download-pr-md-btn" class="secondary-btn-sm">
+                    <svg class="icon-svg" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                    <span>Download</span>
+                  </button>
+                </div>
+              </div>
+
+              <!-- Editable Raw Markdown -->
+              <div class="pr-raw-markdown-wrapper">
+                <textarea id="pr-raw-markdown" class="pr-raw-markdown-editor" spellcheck="false"></textarea>
+              </div>
+
+              <!-- Rendered Visual Preview -->
+              <div class="pr-rendered-preview-box">
+                <div class="rendered-preview-header">PREVIEW:</div>
+                <div id="pr-rendered-content" class="pr-rendered-content"></div>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <!-- ═══════════════════════════════════════════════════
+           VIEW 4: GIT HANDBOOK
+           ═══════════════════════════════════════════════════ -->
+      <div id="view-handbook" class="view-panel" hidden>
+        <section class="handbook-container">
+          <div class="handbook-header">
+            <div class="step-label">PRACTICAL OPEN SOURCE REFERENCE</div>
+            <h2>Git Handbook for Contributors</h2>
+            <p class="handbook-desc">Clear, beginner-friendly commands and explanations for common open-source Git operations. Copy safe commands and learn how to resolve issues with confidence.</p>
+          </div>
+
+          <!-- Handbook Search and Category Filters -->
+          <div class="handbook-controls">
+            <div class="handbook-search-row">
+              <svg class="icon-svg search-icon" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              <input id="handbook-search" class="handbook-search-input" placeholder="Search commands, scenarios (e.g. 'merge conflict', 'undo', 'upstream')..." autocomplete="off" />
+              <button id="handbook-search-clear" class="handbook-clear-btn" type="button" hidden>✕</button>
+            </div>
+            <div class="handbook-categories" role="radiogroup" aria-label="Handbook topics">
+              <button class="handbook-cat-pill active" data-cat="all" type="button">All Topics</button>
+              <button class="handbook-cat-pill" data-cat="setup">Setup &amp; Config</button>
+              <button class="handbook-cat-pill" data-cat="branching">Branching &amp; Commits</button>
+              <button class="handbook-cat-pill" data-cat="upstream">Fork &amp; Upstream</button>
+              <button class="handbook-cat-pill" data-cat="conflicts">Merge Conflicts</button>
+              <button class="handbook-cat-pill" data-cat="undo">Safe Undos &amp; Fixes</button>
             </div>
           </div>
 
-          <!-- Stage Navigation Pills (Beginner / Intermediate / Advanced) -->
-          <div class="learning-stages-bar" role="tablist" aria-label="Learning stages">
-            <button class="stage-btn active" data-stage="beginner" type="button" role="tab" aria-selected="true">
-              <span class="stage-number">01</span>
-              <div class="stage-info">
-                <span class="stage-name">Beginner Stage</span>
-                <span class="stage-sub">First PRs · Small Scopes</span>
-              </div>
-            </button>
-            <button class="stage-btn" data-stage="intermediate" type="button" role="tab" aria-selected="false">
-              <span class="stage-number">02</span>
-              <div class="stage-info">
-                <span class="stage-name">Intermediate Stage</span>
-                <span class="stage-sub">Feature Logic · Unit Tests</span>
-              </div>
-            </button>
-            <button class="stage-btn" data-stage="advanced" type="button" role="tab" aria-selected="false">
-              <span class="stage-number">03</span>
-              <div class="stage-info">
-                <span class="stage-name">Advanced Stage</span>
-                <span class="stage-sub">Refactoring · Architecture</span>
-              </div>
-            </button>
+          <!-- Handbook Topics Grid -->
+          <div id="handbook-cards-grid" class="handbook-cards-grid">
+            <!-- Dynamically populated by app.js -->
+          </div>
+        </section>
+      </div>
+
+      <!-- ═══════════════════════════════════════════════════
+           VIEW 5: GITHUB LIVE STREAM
+           ═══════════════════════════════════════════════════ -->
+      <div id="view-stream" class="view-panel" hidden>
+        <section class="stream-container">
+          <div class="stream-header">
+            <div class="stream-header-text">
+              <div class="step-label">REAL-TIME ACTIVITY FEED</div>
+              <h2>GitHub Open Source Live Stream</h2>
+              <p class="stream-desc">Monitors public GitHub repository activity across verified open-source projects. Displays authentic issue and pull request updates directly from GitHub API.</p>
+            </div>
+            <div class="stream-controls">
+              <button id="stream-refresh-btn" class="secondary-btn-sm" type="button">
+                <svg class="icon-svg" viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+                <span>Refresh Now</span>
+              </button>
+              <button id="stream-toggle-btn" class="stream-toggle-btn paused" type="button">
+                <span class="stream-indicator-dot"></span>
+                <span id="stream-toggle-label">Auto-Refresh Active</span>
+              </button>
+            </div>
           </div>
 
-          <!-- Progress signals banner without false mastery claims -->
-          <div class="learning-progress-banner" id="learning-progress-banner"></div>
-        </div>
-        <!-- Difficulty filter bar -->
-        <div class="difficulty-filter" id="difficulty-filter" hidden>
-          <span class="filter-label" id="diff-filter-label">Difficulty Level:</span>
-          <div class="difficulty-pills" role="radiogroup" aria-labelledby="diff-filter-label">
-            <button class="diff-pill active" data-level="all" type="button" role="radio" aria-checked="true" tabindex="0">All Levels</button>
-            <button class="diff-pill beginner" data-level="beginner" type="button" role="radio" aria-checked="false" tabindex="-1">
-              <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.22 4.22l2.12 2.12M17.66 17.66l2.12 2.12M2 12h3M19 12h3M4.22 19.78l2.12-2.12M17.66 6.34l2.12-2.12"/></svg>
-              Beginner
-            </button>
-            <button class="diff-pill intermediate" data-level="intermediate" type="button" role="radio" aria-checked="false" tabindex="-1">
-              <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
-              Intermediate
-            </button>
-            <button class="diff-pill advanced" data-level="advanced" type="button" role="radio" aria-checked="false" tabindex="-1">
-              <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
-              Advanced
-            </button>
+          <!-- Stream Status & Rate Limit Notice Banner -->
+          <div id="stream-status-banner" class="stream-status-banner">
+            <div class="status-banner-left">
+              <span id="stream-last-updated">Checking GitHub events…</span>
+            </div>
+            <div class="status-banner-right">
+              <span class="stream-source-badge" id="stream-source-badge">Live API Feed</span>
+            </div>
           </div>
-          <button id="diff-reset" class="diff-filter-reset" type="button" title="Reset difficulty filter to All Levels" aria-label="Reset difficulty filter to All Levels" hidden>
-            <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg>
-            <span>Reset</span>
-          </button>
-          <span class="diff-count" id="diff-count" aria-live="polite"></span>
-        </div>
-        <div id="notice" class="notice" hidden></div>
-        <div id="results" class="results-grid">
-          <div class="empty-state">
-            <div class="empty-icon">⌕</div>
-            <strong>Your next open-source contribution is out there.</strong>
-            <span>Enter your skills above to find a few good places to begin.</span>
-          </div>
-        </div>
-      </section>
 
-      <footer>
-        <span>IssueScout · HackDay build</span>
-        <span>GitHub issues checked live · matching runs on your machine</span>
+          <!-- Events Feed List -->
+          <div id="stream-events-feed" class="stream-events-feed">
+            <div class="stream-loading-state">
+              <div class="skeleton-bar medium"></div>
+              <div class="skeleton-bar short"></div>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <!-- ═══════════════════════════════════════════════════
+           VIEW 6: MY PICKS
+           ═══════════════════════════════════════════════════ -->
+      <div id="view-picks" class="view-panel" hidden>
+        <section class="picks-container">
+          <div class="picks-header">
+            <div class="picks-header-text">
+              <div class="step-label">SAVED OPPORTUNITIES</div>
+              <h2>My Contribution Picks</h2>
+              <p class="picks-desc">Review your selected starter issues, launch a step-by-step Fix Blueprint, or export your personalized contribution roadmap.</p>
+            </div>
+            <div class="picks-actions">
+              <button id="picks-export-btn" class="primary-btn-sm" type="button">
+                <svg class="icon-svg" viewBox="0 0 24 24"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg>
+                <span>Export Plan</span>
+              </button>
+              <button id="picks-clear-btn" class="secondary-btn-sm danger-hover" type="button">Clear All</button>
+              <button id="picks-browse-btn" class="secondary-btn-sm" type="button">Find More Issues →</button>
+            </div>
+          </div>
+
+          <div class="picks-storage-notice">
+            <svg class="icon-svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+            <span><strong>Private Browser Storage:</strong> Your picks are preserved in this local browser only. No private data or tokens are sent to external servers.</span>
+          </div>
+
+          <!-- Picks Grid -->
+          <div id="picks-grid" class="picks-grid">
+            <!-- Populated dynamically by app.js -->
+          </div>
+        </section>
+      </div>
+
+      <!-- Global Application Footer -->
+      <footer class="app-footer">
+        <div class="footer-left">
+          <span><strong>IssueScout</strong> · Production HackDay Build</span>
+          <span>Open-source issue discovery &amp; contribution platform</span>
+        </div>
+        <div class="footer-right">
+          <span>MIT Licensed · Verified GitHub Signals · Local AI Inference</span>
+        </div>
       </footer>
     </main>
+
+    <!-- Global Notice Toast -->
+    <div id="global-toast" class="global-toast" hidden></div>
+
     <script src="/app.js" type="module"></script>
   </body>
 </html>
