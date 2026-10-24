@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#f5f3eb" />
+    <title>IssueScout — find your first contribution</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <header class="topbar">
+        <a class="brand" href="/" aria-label="IssueScout home"><span class="brand-mark">↗</span> IssueScout</a>
+        <div class="top-meta"><span class="live-dot"></span><span id="model-status">Connecting to local AI…</span></div>
+      </header>
+
+      <section class="hero">
+        <div class="eyebrow"><span>HACKTOBERFEST 2026</span><span class="eyebrow-line"></span><span>OPEN SOURCE, START HERE</span></div>
+        <h1>Your first contribution<br />starts with <span>the right issue.</span></h1>
+        <p class="hero-copy">Tell us what you know. IssueScout finds open starter issues and uses a local AI model to explain which ones fit.</p>
+      </section>
+
+      <section class="search-panel" aria-labelledby="search-heading">
+        <div class="panel-heading">
+          <div><div class="step-label">01 / YOUR STARTING POINT</div><h2 id="search-heading">What can you work with?</h2></div>
+          <div class="ai-chip"><span>✳</span> LOCAL AI MATCHING</div>
+        </div>
+        <form id="search-form">
+          <label for="skills">Skills and tools</label>
+          <div class="input-row">
+            <input id="skills" name="skills" autocomplete="off" value="JavaScript, React, CSS" placeholder="e.g. Python, design, documentation" required />
+            <button type="submit" id="find-button"><span>Find issues</span><span class="button-arrow">↗</span></button>
+          </div>
+          <div class="helper-row"><span>Separate skills with commas</span><span>Searching GitHub starter issues</span></div>
+        </form>
+      </section>
+
+      <section class="results-section" aria-live="polite">
+        <div class="results-header">
+          <div><div class="step-label">02 / YOUR SHORTLIST</div><h2 id="results-heading">Good issues to start with</h2></div>
+          <span class="result-count" id="result-count">—</span>
+        </div>
+        <div id="notice" class="notice" hidden></div>
+        <div id="results" class="results-grid">
+          <div class="empty-state"><div class="empty-icon">⌕</div><strong>Your next open-source contribution is out there.</strong><span>Enter your skills to find a few good places to begin.</span></div>
+        </div>
+      </section>
+
+      <footer><span>IssueScout · HackDay build</span><span>GitHub issues checked live · matching runs on your machine</span></footer>
+    </main>
+    <script src="/app.js" type="module"></script>
+  </body>
+</html>
