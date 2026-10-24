@@ -13,8 +13,17 @@ function escapeHtml(value = '') {
 
 function showNotice(message = '', kind = '') {
   notice.textContent = message;
-  notice.className = `notice ${kind}`;
+  notice.className = 'notice ' + kind;
   notice.hidden = !message;
+}
+
+function formatIssueFreshness(updatedAt) {
+  const timestamp = Date.parse(updatedAt || '');
+  if (!Number.isFinite(timestamp)) return { label: 'Update time unavailable', stale: false };
+
+  const ageDays = Math.max(0, Math.floor((Date.now() - timestamp) / 86400000));
+  const label = ageDays === 0 ? 'Updated today' : 'Updated ' + ageDays + ' day' + (ageDays === 1 ? '' : 's') + ' ago';
+  return { label, stale: ageDays > 90 };
 }
 
 function renderIssues(issues) {
@@ -23,21 +32,29 @@ function renderIssues(issues) {
     count.textContent = '0 FOUND';
     return;
   }
-  count.textContent = `${issues.length} FOUND`;
+  count.textContent = issues.length + ' FOUND';
   results.innerHTML = issues.map((issue) => {
     const tags = [
-      ...(issue.matchedSkills || []).map((skill) => `<span class="tag match-tag">${escapeHtml(skill)}</span>`),
-      ...(issue.labels || []).slice(0, 3).map((label) => `<span class="tag">${escapeHtml(label)}</span>`),
+      ...(issue.matchedSkills || []).map((skill) => '<span class="tag match-tag">' + escapeHtml(skill) + '</span>'),
+      ...(issue.labels || []).slice(0, 3).map((label) => '<span class="tag">' + escapeHtml(label) + '</span>'),
     ].join('');
-    const score = Number.isFinite(Number(issue.score)) ? `${Math.round(issue.score)}% FIT` : 'MATCH';
-    return `<article class="issue-card">
-      <div class="issue-top"><span class="repo">${escapeHtml(issue.repository)}</span><span class="score">${score}</span></div>
-      <h3 class="issue-title"><a href="${escapeHtml(issue.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(issue.title)}</a></h3>
-      <p class="issue-reason">${escapeHtml(issue.reason)}</p>
-      <div class="tags">${tags}</div>
-      <div class="issue-bottom"><span class="first-step"><b>First step</b> · ${escapeHtml(issue.firstStep)}</span><a class="open-link" href="${escapeHtml(issue.url)}" target="_blank" rel="noopener noreferrer">View issue ↗</a></div>
-           <p  class="issue-freshness">Open and unassigned when GitHub returned this result. Recheck the issue before you start.</p>
-    </article>`;
+    const score = Number.isFinite(Number(issue.score)) ? Math.round(issue.score) + '% FIT' : 'MATCH';
+    const freshness = formatIssueFreshness(issue.updatedAt);
+    const freshnessClass = freshness.stale ? 'issue-freshness stale' : 'issue-freshness';
+    const freshnessNote = freshness.stale
+      ? 'May be stale. Recheck on GitHub before starting.'
+      : 'Open and unassigned when GitHub returned it. Recheck before starting.';
+
+    return [
+      '<article class="issue-card">',
+      '<div class="issue-top"><span class="repo">' + escapeHtml(issue.repository) + '</span><span class="score">' + score + '</span></div>',
+      '<h3 class="issue-title"><a href="' + escapeHtml(issue.url) + '" target="_blank" rel="noopener noreferrer">' + escapeHtml(issue.title) + '</a></h3>',
+      '<p class="issue-reason">' + escapeHtml(issue.reason) + '</p>',
+      '<div class="tags">' + tags + '</div>',
+      '<div class="issue-bottom"><span class="first-step"><b>First step</b> · ' + escapeHtml(issue.firstStep) + '</span><a class="open-link" href="' + escapeHtml(issue.url) + '" target="_blank" rel="noopener noreferrer">View issue ↗</a></div>',
+      '<p class="' + freshnessClass + '"><span>' + escapeHtml(freshness.label) + '</span> · ' + freshnessNote + '</p>',
+      '</article>',
+    ].join('');
   }).join('');
 }
 
@@ -46,10 +63,10 @@ async function checkStatus() {
     const response = await fetch('/api/status');
     const status = await response.json();
     if (status.localModelReady) {
-      modelStatus.textContent = `LOCAL AI READY · ${status.model}`;
+      modelStatus.textContent = 'LOCAL AI READY · ' + status.model;
       liveDot.classList.add('ready');
     } else {
-      modelStatus.textContent = `AI MODEL NEEDED · ${status.model}`;
+      modelStatus.textContent = 'AI MODEL NEEDED · ' + status.model;
     }
   } catch {
     modelStatus.textContent = 'LOCAL SERVER NOT READY';
@@ -75,9 +92,9 @@ form.addEventListener('submit', async (event) => {
     if (!response.ok) throw new Error(data.error || 'The search did not complete.');
     renderIssues(data.issues || []);
     if (data.rankingMode === 'local-ai') {
-      showNotice(`Ranked locally with ${data.model}. Issue data came from GitHub.`);
+      showNotice('Ranked locally with ' + data.model + '. Issue data came from GitHub.');
     } else if (data.rankingMode === 'keyword-fallback') {
-      showNotice(`Showing a basic skill match. To enable AI ranking, start Ollama and load ${data.model}. ${data.aiMessage || ''}`);
+      showNotice('Showing a basic skill match. To enable AI ranking, start Ollama and load ' + data.model + '. ' + (data.aiMessage || ''));
     } else {
       showNotice('No results were returned. Try again in a moment or broaden your skills.');
     }
