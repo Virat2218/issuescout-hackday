@@ -15,6 +15,7 @@ IssueScout starts with the skills a contributor already has and returns a short 
 3. Open one result and show the matched skill, read the reason, and compare it with the evidence excerpt from the issue text.
 4. Follow the link to GitHub and confirm that the issue remains open and unassigned.
 5. Mark one issue as “I’d work on this,” search again, and show similar suggestions moving higher.
+6. Click “Export plan 📋” to download and copy a Markdown contribution checklist with direct issue links, contribution guides, and concrete first steps.
 
 ## 4:30–5:45 — How it works
 
@@ -26,7 +27,9 @@ The model can make a poor match or miss context. GitHub supplies the issue state
 
 ## 6:30–7:15 — Next improvements
 
-Let contributors mark issues they would work on. Save only each GitHub issue ID, labels, and matched skills in that browser, then move similar results higher on later searches. The pick history never goes to the server, and the model fit score stays unchanged. Next, improve match explanations while keeping evidence for every recommendation.
+1. **Automated Contribution Guide Checks**: Deep-link and parse each repository's `CONTRIBUTING.md` to highlight setup requirements, CLA agreements, and PR checklists upfront.
+2. **Maintainer Responsiveness Signals**: Index median time-to-first-review across repositories to route newcomers toward welcoming, active maintainer teams.
+3. **CI/CD & Toolchain Requirements**: Parse repository workflow files (`.github/workflows`) to warn contributors of prerequisite tools (e.g. Docker, specific Python/Node versions) before starting.
 
 ## 7:15–8:00 — Close
 

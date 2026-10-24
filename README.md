@@ -18,10 +18,10 @@ The model and runtime are separate downloads; IssueScout does not redistribute t
 
 ## What the MVP does
 
-1. Searches GitHub for open, unassigned issues tagged `good first issue` or `help wanted`.
-2. Optionally filters candidates to issues that mention at least one chosen language or framework in the title, description, labels, or repository.
-3. Sends the remaining issue text and the contributor's skills to a local Ollama model for ranking and evidence-based explanations.
-4. Shows matched skills, freshness, a first action, and a direct link to each issue.
+1. Searches GitHub for open, unassigned starter issues targeted to the contributor's skills and optional technology focus.
+2. Extracts source-verified evidence excerpts from the issue title, description, or labels for each matched skill with inline highlighting.
+3. Sends candidate issue text and the contributor's skills to a local Ollama model for ranking and evidence-based explanations (with transparent keyword fallback if Ollama is offline).
+4. Shows matched skills, freshness, concrete first actions, and direct links to both the issue and the repository's `CONTRIBUTING.md` guide.
 5. Lets contributors mark issues they would work on and moves later issues with similar labels or matched skills higher in the list.
 
 A pick stores only the GitHub issue ID, labels, and matched skills in this browser. The pick history is never sent to the server, and personalization only reorders the returned shortlist; it does not change the model fit score.
