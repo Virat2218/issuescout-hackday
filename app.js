@@ -861,6 +861,165 @@ function renderRepoHealthBlock(issue) {
   `;
 }
 
+// ── Duplicate and Related Issue Detection Renderers ─────────────────
+function getIssueRelatedIssues(issue) {
+  if (Array.isArray(issue.relatedIssues)) return issue.relatedIssues;
+  return [];
+}
+
+function renderRelatedIssuesBadge(relatedIssues) {
+  if (!Array.isArray(relatedIssues)) return '';
+  const dupMatch = relatedIssues.find((r) => r.relationship === 'possible_duplicate');
+  const depMatch = relatedIssues.find((r) => r.relationship === 'dependency');
+
+  if (dupMatch) {
+    return `
+      <span class="related-badge-indicator badge-dup" title="Potential duplicate issue identified in repository">
+        <svg class="icon-svg" viewBox="0 0 24 24"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        <span>Possible Duplicate</span>
+      </span>
+    `;
+  }
+  if (depMatch) {
+    return `
+      <span class="related-badge-indicator badge-dep" title="Issue has a blocking dependency or blocker">
+        <svg class="icon-svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        <span>Dependency</span>
+      </span>
+    `;
+  }
+  if (relatedIssues.length > 0) {
+    return `
+      <span class="related-badge-indicator badge-rel" title="${relatedIssues.length} related or same-area issues identified">
+        <svg class="icon-svg" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+        <span>${relatedIssues.length} Related</span>
+      </span>
+    `;
+  }
+  return `
+    <span class="related-badge-indicator badge-clean" title="No duplicate or blocking issues detected in analyzed repository activity">
+      <svg class="icon-svg" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+      <span>0 Duplicates</span>
+    </span>
+  `;
+}
+
+function renderRelatedIssuesBlock(issue) {
+  const related = getIssueRelatedIssues(issue);
+  const dupCount = related.filter((r) => r.relationship === 'possible_duplicate').length;
+  const depCount = related.filter((r) => r.relationship === 'dependency').length;
+
+  let pillClass = 'pill-clean';
+  let pillText = '0 Duplicates Detected';
+  if (dupCount > 0) {
+    pillClass = 'pill-warning';
+    pillText = `${dupCount} Potential Duplicate${dupCount > 1 ? 's' : ''}`;
+  } else if (depCount > 0) {
+    pillClass = 'pill-dep';
+    pillText = `${depCount} Dependency / Blocker${depCount > 1 ? 's' : ''}`;
+  } else if (related.length > 0) {
+    pillClass = 'pill-info';
+    pillText = `${related.length} Related Task${related.length > 1 ? 's' : ''}`;
+  }
+
+  const repoName = issue.repository || 'repository';
+  const ghSearchQuery = encodeURIComponent(`is:issue ${(issue.title || '').slice(0, 45)}`);
+  const ghSearchUrl = `https://github.com/${escapeHtml(repoName)}/issues?q=${ghSearchQuery}`;
+
+  return `
+    <details class="related-issues-block" id="related-issues-${escapeHtml(issue.id || '')}">
+      <summary class="related-summary-btn">
+        <div class="related-summary-left">
+          <span class="related-icon-wrap">
+            <svg class="icon-svg" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0 7.07 7.07l1.71-1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+          </span>
+          <span class="related-summary-title">Duplicate & Related Issue Detection</span>
+          <span class="related-status-pill ${pillClass}">
+            <span>${pillText}</span>
+          </span>
+        </div>
+        <div class="related-summary-right">
+          <span class="related-summary-hint">Check prior art & dependencies</span>
+          <svg class="icon-svg related-chevron" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg>
+        </div>
+      </summary>
+
+      <div class="related-issues-body">
+        <div class="related-guidance-callout">
+          <svg class="icon-svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+          <p><b>Duplicate & Dependency Check:</b> Reviewing surrounding issues helps prevent overlapping pull requests, reveals existing test cases, and ensures no blocking prerequisites are missed. Matches are labeled as potential relationships based on available evidence.</p>
+        </div>
+
+        ${related.length === 0 ? `
+          <div class="no-related-box">
+            <svg class="icon-svg" viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+            <div class="no-related-content">
+              <strong>No duplicates or blocking dependencies found</strong>
+              <span>No overlapping tasks were detected in recent repository activity. This issue appears independent and safe to claim.</span>
+            </div>
+          </div>
+        ` : `
+          <div class="related-items-grid">
+            ${related.map((item) => {
+              const stateClass = item.state === 'open' ? 'state-open' : 'state-closed';
+              const stateText = item.state === 'open' ? 'Open' : 'Closed';
+              let relTypeClass = 'rel-related';
+              if (item.relationship === 'possible_duplicate') relTypeClass = 'rel-duplicate';
+              else if (item.relationship === 'dependency') relTypeClass = 'rel-dependency';
+              else if (item.relationship === 'same_area') relTypeClass = 'rel-same-area';
+
+              return `
+                <div class="related-item-card ${relTypeClass}">
+                  <div class="related-item-top">
+                    <span class="rel-badge-state ${stateClass}">${stateText}</span>
+                    <span class="rel-badge-category ${relTypeClass}">${escapeHtml(item.relationshipLabel)}</span>
+                    <span class="rel-badge-repo ${item.isSameRepo ? 'same-repo' : 'cross-repo'}">
+                      ${item.isSameRepo ? 'Same Repository' : escapeHtml(item.repository)}
+                    </span>
+                  </div>
+
+                  <h4 class="related-item-title">
+                    <a href="${escapeHtml(item.url)}" target="_blank" rel="noopener noreferrer">
+                      <span>${escapeHtml(item.title)}</span>
+                      <svg class="icon-svg" viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                    </a>
+                  </h4>
+
+                  <p class="related-item-explanation">${escapeHtml(item.explanation)}</p>
+
+                  ${item.sharedSignals && item.sharedSignals.length > 0 ? `
+                    <div class="related-signals-row">
+                      <span class="signals-label">Evidence signals:</span>
+                      <div class="signals-chips">
+                        ${item.sharedSignals.map((sig) => `<span class="signal-chip">${escapeHtml(sig)}</span>`).join('')}
+                      </div>
+                    </div>
+                  ` : ''}
+
+                  <div class="related-item-footer">
+                    <a class="view-related-gh-link" href="${escapeHtml(item.url)}" target="_blank" rel="noopener noreferrer">
+                      <span>View issue on GitHub</span>
+                      <svg class="icon-svg" viewBox="0 0 24 24"><path d="M5 12h14"/><polyline points="12 5 19 12 12 19"/></svg>
+                    </a>
+                  </div>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        `}
+
+        <div class="related-footer-bar">
+          <span class="related-footer-text">Need to explore further discussions in this repository?</span>
+          <a class="related-gh-search-btn" href="${ghSearchUrl}" target="_blank" rel="noopener noreferrer">
+            <svg class="icon-svg" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <span>Search all issues in ${escapeHtml(repoName)}</span>
+          </a>
+        </div>
+      </div>
+    </details>
+  `;
+}
+
 /**
  * Safely extract and normalize the difficulty level of an issue.
  * Supports: 'beginner', 'intermediate', 'advanced'.
@@ -1002,10 +1161,13 @@ function renderIssueCards(issues) {
     const health = getIssueRepoHealth(issue);
     const healthBadge = renderRepoHealthBadge(health);
     const healthBlock = renderRepoHealthBlock(issue);
+    const related = getIssueRelatedIssues(issue);
+    const relatedBadge = renderRelatedIssuesBadge(related);
+    const relatedBlock = renderRelatedIssuesBlock(issue);
 
     return [
       '<article class="issue-card">',
-      '<div class="issue-top"><div class="issue-top-left"><span class="repo">' + escapeHtml(issue.repository) + '</span>' + healthBadge + '</div><div class="issue-top-badges"><span class="score">' + score + '</span>' + difficultyBadge + similarBadge + '</div></div>',
+      '<div class="issue-top"><div class="issue-top-left"><span class="repo">' + escapeHtml(issue.repository) + '</span>' + healthBadge + '</div><div class="issue-top-badges"><span class="score">' + score + '</span>' + difficultyBadge + similarBadge + relatedBadge + '</div></div>',
       '<h3 class="issue-title"><a href="' + escapeHtml(issue.url) + '" target="_blank" rel="noopener noreferrer">' + escapeHtml(issue.title) + '</a></h3>',
       '<p class="issue-reason">' + escapeHtml(issue.reason) + '</p>',
       '<div class="issue-evidence"><strong>Evidence from issue</strong>' + (evidence.length ? '<ul>' + evidence.map((item) => '<li><span class="evidence-source">' + escapeHtml(item.source) + '</span>' + (item.skill ? ' <span class="evidence-skill">[' + escapeHtml(item.skill) + ']</span>' : '') + ': "' + formatEvidenceQuote(item.quote, item.skill) + '"</li>').join('') + '</ul>' : '<p class="no-evidence">No exact skill phrase found in the issue text. Review it before relying on this match.</p>') + '</div>',
@@ -1013,6 +1175,7 @@ function renderIssueCards(issues) {
       diffBlock,
       renderSkillGapBlock(issue),
       healthBlock,
+      relatedBlock,
       '<div class="issue-bottom"><span class="first-step"><b>First step</b> · ' + escapeHtml(issue.firstStep) + '</span><div class="issue-actions"><button class="pick-button' + (picked ? ' picked' : '') + '" type="button" data-issue-id="' + issueId + '" aria-pressed="' + picked + '">' + pickButtonContent + '</button><a class="guide-link" href="' + contributingUrl + '" target="_blank" rel="noopener noreferrer" title="View repository contribution guidelines"><svg class="icon-svg" viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg> <span>Guide</span></a><a class="open-link" href="' + escapeHtml(issue.url) + '" target="_blank" rel="noopener noreferrer"><span>View issue</span> <svg class="icon-svg" viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg></a></div></div>',
       '<p class="' + freshnessClass + '"><span>' + escapeHtml(freshness.label) + '</span> · ' + freshnessNote + '</p>',
       '</article>',
@@ -1266,6 +1429,9 @@ function renderLearningPathCards(issues, stage) {
     const health = getIssueRepoHealth(issue);
     const healthBadge = renderRepoHealthBadge(health);
     const healthBlock = renderRepoHealthBlock(issue);
+    const related = getIssueRelatedIssues(issue);
+    const relatedBadge = renderRelatedIssuesBadge(related);
+    const relatedBlock = renderRelatedIssuesBlock(issue);
 
     return `
       <article class="issue-card learning-card stage-card--${stage}">
@@ -1276,6 +1442,7 @@ function renderLearningPathCards(issues, stage) {
             <span class="score">${score}</span>
             ${difficultyBadge}
             ${healthBadge}
+            ${relatedBadge}
           </div>
         </div>
 
@@ -1299,6 +1466,8 @@ function renderLearningPathCards(issues, stage) {
         ${renderSkillGapBlock(issue)}
 
         ${healthBlock}
+
+        ${relatedBlock}
 
         <div class="issue-bottom">
           <span class="first-step"><b>Next concrete action</b> · ${escapeHtml(issue.firstStep)}</span>
@@ -1366,6 +1535,7 @@ function generateContributionPlanMarkdown() {
     const gap = getIssueSkillGap(item);
     const health = getIssueRepoHealth(item);
     const healthScoreText = health.score !== null ? `${health.score}/100 activity score` : 'Activity score unassigned';
+    const related = getIssueRelatedIssues(item);
 
     md += `### ${idx + 1}. [${repo}] ${title}\n\n`;
     md += `- **Issue Link**: [View on GitHub](${url})\n`;
@@ -1378,6 +1548,15 @@ function generateContributionPlanMarkdown() {
     }
     if (health.sources) {
       md += `  - Activity Sources: [Commits](${health.sources.commitsUrl}) · [Pull Requests](${health.sources.pullsUrl}) · [Releases](${health.sources.releasesUrl})\n`;
+    }
+    if (related && related.length > 0) {
+      md += `- **Duplicate & Related Issues Checked** (${related.length} identified):\n`;
+      related.forEach((rel) => {
+        md += `  - [${rel.state.toUpperCase()}] **${rel.relationshipLabel}**: [${rel.repository} - ${rel.title}](${rel.url})\n`;
+        md += `    *${rel.explanation}*\n`;
+      });
+    } else {
+      md += `- **Duplicate & Related Issues Checked**: No duplicate or blocking issues detected in analyzed repository records.\n`;
     }
     md += `- **Skill-Gap Status**: ${gap.readinessLabel} (${gap.matchingSkills.length} matching, ${gap.unconfirmedSkills.length} unconfirmed gap${gap.unconfirmedSkills.length === 1 ? '' : 's'})\n`;
     if (gap.unconfirmedSkills.length > 0) {
@@ -1439,6 +1618,7 @@ results.addEventListener('click', (event) => {
         difficulty: issue.difficulty,
         skillGap: issue.skillGap,
         repoHealth: issue.repoHealth,
+        relatedIssues: issue.relatedIssues || [],
       };
       chosenIssues = Object.fromEntries(Object.entries(chosenIssues).slice(-50));
       showNotice('Marked as a pick! Similar starter issues will move higher on later searches.');

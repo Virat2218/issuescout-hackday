@@ -1047,6 +1047,304 @@ function analyzeSkillGap(issue, userSkills = [], technologies = []) {
   };
 }
 
+// ── Duplicate & Related Issue Detection ──────────────────────────────
+const STOP_WORDS = new Set([
+  'the', 'is', 'at', 'which', 'on', 'a', 'an', 'and', 'or', 'in', 'with', 'to', 'for', 'of',
+  'as', 'by', 'from', 'up', 'about', 'into', 'over', 'after', 'beneath', 'under', 'above',
+  'fix', 'fixes', 'fixing', 'fixed', 'bug', 'issue', 'issues', 'error', 'errors', 'problem', 'problems',
+  'add', 'added', 'adding', 'update', 'updated', 'updating', 'create', 'created', 'creating',
+  'remove', 'removed', 'removing', 'delete', 'deleted', 'please', 'help', 'needed', 'needs',
+  'feature', 'support', 'improve', 'improved', 'make', 'how', 'why', 'what', 'when', 'where',
+  'good', 'first', 'starter', 'easy', 'simple', 'change', 'changes', 'changing', 'new', 'some',
+  'all', 'any', 'both', 'each', 'more', 'most', 'other', 'such', 'no', 'nor', 'not', 'only',
+  'own', 'same', 'so', 'than', 'too', 'very', 'can', 'will', 'just', 'should', 'now', 'do',
+  'does', 'did', 'doing', 'would', 'could', 'has', 'have', 'had', 'having', 'be', 'been', 'being',
+  'this', 'that', 'these', 'those', 'there', 'their', 'them', 'then'
+]);
+
+function extractMeaningfulTokens(text) {
+  if (!text || typeof text !== 'string') return [];
+  const cleaned = text
+    .toLowerCase()
+    .replace(/[^\w\s\-\.\/]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  const words = cleaned.split(' ');
+  const tokens = [];
+  for (const word of words) {
+    const trimmed = word.trim();
+    if (trimmed.length >= 3 && !STOP_WORDS.has(trimmed) && !/^\d+$/.test(trimmed)) {
+      tokens.push(trimmed);
+    }
+  }
+  return [...new Set(tokens)];
+}
+
+function extractBigrams(text) {
+  if (!text || typeof text !== 'string') return [];
+  const words = text
+    .toLowerCase()
+    .replace(/[^\w\s]/g, ' ')
+    .trim()
+    .split(/\s+/)
+    .filter((w) => w.length >= 3 && !STOP_WORDS.has(w));
+  const bigrams = [];
+  for (let i = 0; i < words.length - 1; i++) {
+    bigrams.push(`${words[i]} ${words[i + 1]}`);
+  }
+  return [...new Set(bigrams)];
+}
+
+function extractIssueNumberFromUrl(url) {
+  if (!url || typeof url !== 'string') return null;
+  const match = url.match(/\/issues\/(\d+)/i);
+  return match ? match[1] : null;
+}
+
+function extractIssueReferences(text) {
+  if (!text || typeof text !== 'string') return { explicitRefs: [], dependencies: [], duplicateRefs: [] };
+  const explicitRefs = [];
+  const dependencies = [];
+  const duplicateRefs = [];
+
+  const refMatches = text.matchAll(/(?:#|gh-)(\d+)/gi);
+  for (const m of refMatches) {
+    explicitRefs.push(m[1]);
+  }
+
+  const depMatches = text.matchAll(/(?:depends\s+on|blocked\s+by|prerequisite(?:\s+for)?|requires|blocks|blocking|sub-task\s+of|parent\s+issue)\s+(?:#|gh-)?(\d+)/gi);
+  for (const m of depMatches) {
+    dependencies.push(m[1]);
+  }
+
+  const dupMatches = text.matchAll(/(?:duplicate\s+of|closing\s+as\s+dup(?:licate)?\s+of|dup\s+of)\s+(?:#|gh-)?(\d+)/gi);
+  for (const m of dupMatches) {
+    duplicateRefs.push(m[1]);
+  }
+
+  return {
+    explicitRefs: [...new Set(explicitRefs)],
+    dependencies: [...new Set(dependencies)],
+    duplicateRefs: [...new Set(duplicateRefs)],
+  };
+}
+
+const sameRepoIssuesCache = new Map();
+const relatedIssuesCache = new Map();
+
+async function fetchSameRepoIssues(repoName) {
+  if (!repoName || typeof repoName !== 'string') return [];
+  const cacheKey = repoName.toLowerCase();
+  const cached = sameRepoIssuesCache.get(cacheKey);
+  if (cached && (Date.now() - cached.timestamp < 900000)) { // 15 min TTL
+    return cached.issues;
+  }
+
+  let issues = [];
+  try {
+    const query = `repo:${repoName} is:issue`;
+    const fetched = await queryGitHub(query, 15);
+    issues = (fetched || []).map((item) => ({
+      id: item.id,
+      title: item.title,
+      url: item.html_url,
+      repository: repoName,
+      state: item.state,
+      createdAt: item.created_at,
+      updatedAt: item.updated_at,
+      comments: item.comments || 0,
+      labels: (item.labels || []).map((label) => typeof label === 'string' ? label : label.name),
+      body: (item.body || '').slice(0, 1500),
+    }));
+    for (const issue of issues) {
+      knownIssuesPool.set(issue.url, issue);
+    }
+  } catch {
+    // If GitHub API fails or rate limited, fall back to known issues pool
+    issues = [...knownIssuesPool.values(), ...BUNDLED_STARTER_ISSUES].filter(
+      (item) => item.repository && item.repository.toLowerCase() === repoName.toLowerCase()
+    );
+  }
+
+  sameRepoIssuesCache.set(cacheKey, { timestamp: Date.now(), issues });
+  return issues;
+}
+
+/**
+ * Detect potential duplicates, dependencies, same feature area, and related issues
+ * for a target issue against a pool of candidate issues.
+ * Strictest requirement: NEVER claim duplicate based on a single shared keyword.
+ */
+function detectRelatedIssues(targetIssue, candidatePool = []) {
+  if (!targetIssue || !targetIssue.title) return [];
+
+  const targetId = String(targetIssue.id || '');
+  const targetUrl = targetIssue.url || '';
+  const targetNum = extractIssueNumberFromUrl(targetUrl);
+  const targetRepo = (targetIssue.repository || '').toLowerCase();
+  const targetTitle = targetIssue.title || '';
+  const targetBody = targetIssue.body || '';
+  const targetCombined = `${targetTitle} ${targetBody}`;
+
+  const targetTokens = extractMeaningfulTokens(targetTitle);
+  const targetBigrams = extractBigrams(targetCombined.slice(0, 800));
+  const targetRefs = extractIssueReferences(targetCombined);
+  const targetFiles = detectReferencedFiles(targetBody);
+
+  const GENERIC_LABELS = new Set(['good first issue', 'good-first-issue', 'help wanted', 'help-wanted', 'hacktoberfest']);
+  const targetSpecificLabels = (targetIssue.labels || [])
+    .map((l) => typeof l === 'string' ? l.toLowerCase() : (l.name || '').toLowerCase())
+    .filter((l) => l && !GENERIC_LABELS.has(l));
+
+  const seenUrls = new Set([targetUrl]);
+  const matches = [];
+
+  for (const candidate of candidatePool) {
+    if (!candidate || !candidate.title) continue;
+    const candUrl = candidate.url || '';
+    const candId = String(candidate.id || '');
+    if (seenUrls.has(candUrl) || (targetId && candId === targetId)) continue;
+    seenUrls.add(candUrl);
+
+    const candNum = extractIssueNumberFromUrl(candUrl);
+    const candRepo = (candidate.repository || '').toLowerCase();
+    const isSameRepo = Boolean(targetRepo && candRepo && targetRepo === candRepo);
+
+    const candTitle = candidate.title || '';
+    const candBody = candidate.body || '';
+    const candCombined = `${candTitle} ${candBody}`;
+    const candTokens = extractMeaningfulTokens(candTitle);
+    const candBigrams = extractBigrams(candCombined.slice(0, 800));
+    const candRefs = extractIssueReferences(candCombined);
+    const candFiles = detectReferencedFiles(candBody);
+
+    const candSpecificLabels = (candidate.labels || [])
+      .map((l) => typeof l === 'string' ? l.toLowerCase() : (l.name || '').toLowerCase())
+      .filter((l) => l && !GENERIC_LABELS.has(l));
+
+    // Overlaps
+    const sharedTokens = targetTokens.filter((t) => candTokens.includes(t));
+    const unionTokens = new Set([...targetTokens, ...candTokens]);
+    const titleJaccard = unionTokens.size > 0 ? (sharedTokens.length / unionTokens.size) : 0;
+
+    const sharedBigrams = targetBigrams.filter((b) => candBigrams.includes(b));
+    const sharedFiles = targetFiles.filter((f) => candFiles.includes(f));
+    const sharedLabels = targetSpecificLabels.filter((l) => candSpecificLabels.includes(l));
+
+    let relationship = null;
+    let relationshipLabel = null;
+    let explanation = null;
+    let isExplicit = false;
+    let priority = 99;
+    const sharedSignals = [...new Set([...sharedFiles, ...sharedBigrams, ...sharedLabels, ...sharedTokens])].slice(0, 4);
+
+    // ── 1. Check explicit dependencies ─────────────────────────────
+    const targetHasDep = candNum && targetRefs.dependencies.includes(candNum);
+    const candHasDep = targetNum && candRefs.dependencies.includes(targetNum);
+    if (targetHasDep || candHasDep) {
+      relationship = 'dependency';
+      relationshipLabel = 'Depends on or blocks another issue';
+      isExplicit = true;
+      priority = 1;
+      explanation = targetHasDep
+        ? `Explicit dependency: The issue description references #${candNum} as a blocking prerequisite or sub-task.`
+        : `Explicit dependency: Issue #${candNum} lists this issue as a prerequisite or blocking task.`;
+    }
+
+    // ── 2. Check explicit duplicate markers ────────────────────────
+    if (!relationship) {
+      const targetHasDup = candNum && targetRefs.duplicateRefs.includes(candNum);
+      const candHasDup = targetNum && candRefs.duplicateRefs.includes(targetNum);
+      const candLabelDup = (candidate.labels || []).some((l) => String(l).toLowerCase() === 'duplicate');
+
+      if (targetHasDup || candHasDup || (candLabelDup && targetNum && candRefs.explicitRefs.includes(targetNum))) {
+        relationship = 'possible_duplicate';
+        relationshipLabel = 'Confirmed Duplicate (GitHub marker)';
+        isExplicit = true;
+        priority = 2;
+        explanation = `GitHub issue records explicitly flag this as a duplicate (#${candNum || targetNum}).`;
+      }
+    }
+
+    // ── 3. Content similarity: Possible Duplicate ──────────────────
+    // Strictly adheres to Requirement 11: Never claim duplicate based only on a shared keyword.
+    if (!relationship && isSameRepo) {
+      const isHighSimilarity = titleJaccard >= 0.55 && sharedTokens.length >= 2;
+      const isVeryHighJaccard = titleJaccard >= 0.70;
+      const hasSharedBigramAndTokens = sharedTokens.length >= 2 && sharedBigrams.length >= 1 && titleJaccard >= 0.40;
+
+      if (isHighSimilarity || isVeryHighJaccard || hasSharedBigramAndTokens) {
+        relationship = 'possible_duplicate';
+        relationshipLabel = 'Potential Duplicate';
+        isExplicit = false;
+        priority = 3;
+        const pct = Math.round(titleJaccard * 100);
+        explanation = `Potential duplicate — High phrasing overlap (${pct}% title similarity) in the same repository. Both address "${sharedTokens.slice(0, 3).join(', ')}". Verify with maintainers before starting.`;
+      }
+    }
+
+    // ── 4. Same feature or bug area ────────────────────────────────
+    if (!relationship && isSameRepo) {
+      const hasSharedFile = sharedFiles.length > 0;
+      const hasSharedSpecificLabelAndToken = sharedLabels.length >= 1 && sharedTokens.length >= 1;
+      const hasSharedBigram = sharedBigrams.length >= 1;
+      const hasMultipleTokens = sharedTokens.length >= 2;
+
+      if (hasSharedFile || hasSharedSpecificLabelAndToken || hasSharedBigram || hasMultipleTokens) {
+        relationship = 'same_area';
+        relationshipLabel = 'Same Feature / Bug Area';
+        isExplicit = false;
+        priority = 4;
+        const areaSignals = [...sharedFiles, ...sharedLabels, ...sharedBigrams, ...sharedTokens].slice(0, 2);
+        explanation = `Touches the same feature area or code path (${areaSignals.join(', ')}). Reviewing it gives helpful context on existing conventions.`;
+      }
+    }
+
+    // ── 5. Related issue ───────────────────────────────────────────
+    if (!relationship) {
+      const sameRepoRelated = isSameRepo && sharedTokens.length >= 1 && (candTokens.length >= 1 || sharedBigrams.length >= 1);
+      const crossRepoMultipleTokens = !isSameRepo && sharedTokens.length >= 2;
+      const crossRepoBigram = !isSameRepo && sharedBigrams.length >= 1;
+
+      if (sameRepoRelated || crossRepoMultipleTokens || crossRepoBigram) {
+        relationship = 'related_issue';
+        relationshipLabel = 'Related Issue';
+        isExplicit = false;
+        priority = 5;
+        const relSignals = [...sharedBigrams, ...sharedTokens].slice(0, 2);
+        explanation = `Related open-source task addressing similar requirements (${relSignals.join(', ')}). Useful for architectural comparison.`;
+      }
+    }
+
+    if (relationship) {
+      matches.push({
+        id: candidate.id || null,
+        title: candidate.title,
+        url: candidate.url,
+        repository: candidate.repository,
+        isSameRepo,
+        state: candidate.state || 'open',
+        relationship,
+        relationshipLabel,
+        isExplicit,
+        explanation,
+        sharedSignals,
+        similarityScore: Math.round(titleJaccard * 100),
+        priority,
+      });
+    }
+  }
+
+  // Sort: Same repository first (Requirement 6), then by relationship priority, then similarity
+  matches.sort((a, b) => {
+    if (a.isSameRepo !== b.isSameRepo) return b.isSameRepo ? 1 : -1;
+    if (a.priority !== b.priority) return a.priority - b.priority;
+    return b.similarityScore - a.similarityScore;
+  });
+
+  return matches.slice(0, 4);
+}
+
 function localScore(issue, skills = [], technologies = []) {
   const matched = skills.filter((skill) =>
     matchSkillInText(issue.title, skill) ||
@@ -1260,9 +1558,11 @@ const server = http.createServer(async (req, res) => {
         })
       );
 
+      const candidatePool = [...ranked, ...knownIssuesPool.values(), ...BUNDLED_STARTER_ISSUES];
       const enriched = ranked.map((issue) => ({
         ...issue,
         repoHealth: healthMap.get(issue.repository) || null,
+        relatedIssues: detectRelatedIssues(issue, candidatePool),
       }));
 
       return send(res, 200, {
@@ -1271,6 +1571,46 @@ const server = http.createServer(async (req, res) => {
         model: ollamaModel,
         aiMessage,
         fallbackActive,
+      });
+    }
+    if (req.method === 'GET' && url.pathname === '/api/related-issues') {
+      const issueUrl = url.searchParams.get('url') || '';
+      const repo = url.searchParams.get('repo') || '';
+      const title = url.searchParams.get('title') || '';
+      const body = url.searchParams.get('body') || '';
+
+      let targetIssue = knownIssuesPool.get(issueUrl);
+      if (targetIssue) {
+        targetIssue = { ...targetIssue };
+        if (title) targetIssue.title = title;
+        if (body) targetIssue.body = body;
+        if (repo) targetIssue.repository = repo;
+      } else if (title || issueUrl) {
+        targetIssue = {
+          url: issueUrl,
+          repository: repo,
+          title,
+          body,
+          labels: [],
+        };
+      }
+      if (!targetIssue) {
+        return send(res, 400, { error: 'Provide url or title and repo query parameters.' });
+      }
+
+      let candidatePool = [...knownIssuesPool.values(), ...BUNDLED_STARTER_ISSUES];
+      if (repo) {
+        const sameRepo = await fetchSameRepoIssues(repo);
+        candidatePool = [...sameRepo, ...candidatePool];
+      }
+
+      const relatedIssues = detectRelatedIssues(targetIssue, candidatePool);
+      return send(res, 200, {
+        issueUrl: targetIssue.url,
+        repository: targetIssue.repository,
+        relatedIssues,
+        totalMatches: relatedIssues.length,
+        analyzedCount: candidatePool.length,
       });
     }
     if (req.method === 'GET' && url.pathname === '/api/repo-health') {
