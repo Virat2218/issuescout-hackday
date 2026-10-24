@@ -193,15 +193,31 @@ function renderDifficultyBlock(difficulty) {
 }
 
 /**
+ * Safely extract and normalize the difficulty level of an issue.
+ * Supports: 'beginner', 'intermediate', 'advanced'.
+ * Falls back to 'unknown' if missing or invalid.
+ */
+function getIssueDifficultyLevel(issue) {
+  const raw = issue?.difficulty?.level;
+  if (typeof raw === 'string') {
+    const normalized = raw.trim().toLowerCase();
+    if (['beginner', 'intermediate', 'advanced', 'unknown'].includes(normalized)) {
+      return normalized;
+    }
+  }
+  return 'unknown';
+}
+
+/**
  * Apply the active difficulty filter to the stored issue list and re-render.
- * Called when the filter changes without a new search.
+ * Filters issues without mutating original issue objects, fit scores, or ranks.
  */
 function applyDifficultyFilter() {
   const filtered = activeDifficultyFilter === 'all'
     ? currentIssues
-    : currentIssues.filter((issue) => (issue.difficulty?.level || 'unknown') === activeDifficultyFilter);
+    : currentIssues.filter((issue) => getIssueDifficultyLevel(issue) === activeDifficultyFilter);
 
-  // Update pill active states
+  // Update pill active states and accessibility
   document.querySelectorAll('.diff-pill').forEach((pill) => {
     const isSelected = pill.dataset.level === activeDifficultyFilter;
     pill.classList.toggle('active', isSelected);
@@ -226,10 +242,15 @@ function applyDifficultyFilter() {
     results.innerHTML = `<div class="empty-state">
       <div class="empty-icon">⌕</div>
       <strong>No ${levelLabel} issues in your current shortlist.</strong>
-      <span>Try a different level or search again to get fresh results.</span>
-      <button class="diff-reset-btn" type="button" onclick="document.querySelector('[data-level=all]').click()">Show all levels</button>
+      <span>Try a different difficulty level or broaden your search skills.</span>
+      <button class="diff-reset-btn" type="button" id="diff-empty-reset">Show all levels</button>
     </div>`;
     count.textContent = '0 SHOWN';
+    document.querySelector('#diff-empty-reset')?.addEventListener('click', () => {
+      activeDifficultyFilter = 'all';
+      applyDifficultyFilter();
+      document.querySelector('.diff-pill[data-level="all"]')?.focus();
+    });
     return;
   }
 
@@ -379,6 +400,7 @@ results.addEventListener('click', (event) => {
       score: issue.score,
       labels: (issue.labels || []).slice(0, 12),
       matchedSkills: (issue.matchedSkills || []).slice(0, 12),
+      difficulty: issue.difficulty,
     };
     chosenIssues = Object.fromEntries(Object.entries(chosenIssues).slice(-50));
     showNotice('Marked as a pick! Similar starter issues will move higher on later searches.');
