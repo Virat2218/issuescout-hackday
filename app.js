@@ -21,7 +21,7 @@ function updatePickButtons() {
   }
   if (exportPlanButton) {
     exportPlanButton.hidden = pickCount === 0;
-    exportPlanButton.textContent = 'Export plan (' + pickCount + ') 📋';
+    exportPlanButton.innerHTML = '<svg class="icon-svg" viewBox="0 0 24 24"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg> <span>Export plan (' + pickCount + ')</span>';
   }
 }
 
@@ -127,7 +127,9 @@ function renderIssues(issues) {
     const evidence = getIssueEvidence(issue);
     const issueId = escapeHtml(issue.id || '');
     const picked = Boolean(chosenIssues[issue.id]);
-    const pickButtonLabel = picked ? 'Added to my picks' : 'I’d work on this';
+    const pickButtonContent = picked
+      ? '<svg class="icon-svg" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg> <span>Added to picks</span>'
+      : '<svg class="icon-svg" viewBox="0 0 24 24"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg> <span>I’d work on this</span>';
     const similarBadge = issue.pickMatchScore > 0 ? '<span class="pick-similar">Similar to your picks</span>' : '';
     const freshnessClass = freshness.stale ? 'issue-freshness stale' : 'issue-freshness';
     const freshnessNote = freshness.stale
@@ -144,7 +146,7 @@ function renderIssues(issues) {
       '<p class="issue-reason">' + escapeHtml(issue.reason) + '</p>',
       '<div class="issue-evidence"><strong>Evidence from issue</strong>' + (evidence.length ? '<ul>' + evidence.map((item) => '<li><span class="evidence-source">' + escapeHtml(item.source) + '</span>' + (item.skill ? ' <span class="evidence-skill">[' + escapeHtml(item.skill) + ']</span>' : '') + ': “' + formatEvidenceQuote(item.quote, item.skill) + '”</li>').join('') + '</ul>' : '<p class="no-evidence">No exact skill phrase found in the issue text. Review it before relying on this match.</p>') + '</div>',
       '<div class="tags">' + tags + '</div>',
-      '<div class="issue-bottom"><span class="first-step"><b>First step</b> · ' + escapeHtml(issue.firstStep) + '</span><div class="issue-actions"><button class="pick-button' + (picked ? ' picked' : '') + '" type="button" data-issue-id="' + issueId + '" aria-pressed="' + picked + '">' + pickButtonLabel + '</button><a class="guide-link" href="' + contributingUrl + '" target="_blank" rel="noopener noreferrer" title="View repository contribution guidelines">Guide 📖</a><a class="open-link" href="' + escapeHtml(issue.url) + '" target="_blank" rel="noopener noreferrer">View issue ↗</a></div></div>',
+      '<div class="issue-bottom"><span class="first-step"><b>First step</b> · ' + escapeHtml(issue.firstStep) + '</span><div class="issue-actions"><button class="pick-button' + (picked ? ' picked' : '') + '" type="button" data-issue-id="' + issueId + '" aria-pressed="' + picked + '">' + pickButtonContent + '</button><a class="guide-link" href="' + contributingUrl + '" target="_blank" rel="noopener noreferrer" title="View repository contribution guidelines"><svg class="icon-svg" viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg> <span>Guide</span></a><a class="open-link" href="' + escapeHtml(issue.url) + '" target="_blank" rel="noopener noreferrer"><span>View issue</span> <svg class="icon-svg" viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg></a></div></div>',
       '<p class="' + freshnessClass + '"><span>' + escapeHtml(freshness.label) + '</span> · ' + freshnessNote + '</p>',
       '</article>',
     ].join('');
@@ -273,7 +275,8 @@ form.addEventListener('submit', async (event) => {
   button.disabled = true;
   button.querySelector('span:first-child').textContent = 'Finding matches…';
   showNotice('Searching GitHub and asking the local model to rank open issues.');
-  results.innerHTML = '<div class="empty-state"><div class="empty-icon">✳</div><strong>Finding a good starting point…</strong><span>This can take up to a minute while the local model loads.</span></div>';
+  const skeletonCard = '<article class="skeleton-card" aria-hidden="true"><div class="skeleton-bar short"></div><div class="skeleton-bar title"></div><div class="skeleton-bar medium"></div><div class="skeleton-box"></div></article>';
+  results.innerHTML = skeletonCard + skeletonCard;
   count.textContent = '…';
   try {
     const response = await fetch('/api/find', {
@@ -301,6 +304,18 @@ form.addEventListener('submit', async (event) => {
     button.disabled = false;
     button.querySelector('span:first-child').textContent = 'Find issues';
   }
+});
+
+document.querySelectorAll('.preset-chips .chip').forEach((chip) => {
+  chip.addEventListener('click', () => {
+    input.value = chip.dataset.skills || '';
+    technologyInput.value = chip.dataset.tech || '';
+    if (typeof form.requestSubmit === 'function') {
+      form.requestSubmit();
+    } else {
+      form.dispatchEvent(new Event('submit', { cancelable: true }));
+    }
+  });
 });
 
 checkStatus();
