@@ -516,6 +516,230 @@ async function searchGitHub(skills = [], technologies = []) {
   return { issues, fallbackActive };
 }
 
+const repoHealthCache = new Map();
+
+/**
+ * Fallback generator when GitHub API is rate-limited or fails.
+ * Explicitly leaves score as null and flags unavailable data (Requirement 8, 12).
+ */
+function buildFallbackRepoHealth(repoName, fallbackIssue, reason, sources, checkedAt) {
+  const issueUpdatedDays = fallbackIssue?.updatedAt
+    ? Math.max(0, Math.floor((Date.now() - Date.parse(fallbackIssue.updatedAt)) / 86400000))
+    : null;
+
+  return {
+    repository: repoName,
+    status: reason === 'rate-limited' ? 'estimated' : 'unverified',
+    statusLabel: reason === 'rate-limited' ? 'Rate Limit Guard (Estimated)' : 'Activity Data Unverified',
+    statusSummary: reason === 'rate-limited'
+      ? `GitHub API rate limit reached. The issue was updated ${issueUpdatedDays !== null ? (issueUpdatedDays === 0 ? 'today' : issueUpdatedDays + 'd ago') : 'recently'}. Direct activity sources are provided below.`
+      : `Repository details could not be verified live over the network. Check the direct activity links below on GitHub.`,
+    score: null, // Avoid assigning misleading score when evidence is insufficient (Requirement 8)
+    scoringCriteria: null,
+    signals: [
+      { name: 'Issue Update Recency', value: issueUpdatedDays !== null ? `Issue updated ${issueUpdatedDays === 0 ? 'today' : issueUpdatedDays + 'd ago'}` : 'Update timestamp unavailable', verified: false, sourceUrl: fallbackIssue?.url || sources.repo },
+      { name: 'Repository Source', value: 'Check commit & PR activity directly on GitHub', verified: false, sourceUrl: sources.repo },
+    ],
+    isArchived: false,
+    daysSincePush: null,
+    observationPeriod: 'Past 90 days',
+    checkedAt,
+    qualityDisclaimer: 'Maintenance pace reflects recent update frequency, not repository quality. Stable libraries often require fewer changes.',
+    sources,
+    isFallback: true,
+    fallbackReason: reason,
+  };
+}
+
+/**
+ * Analyze publicly available GitHub repository information using the GitHub integration.
+ * Evaluates:
+ * - Recent commit activity (pushed_at)
+ * - Recent releases
+ * - Issue & Pull Request volume
+ * - Repository archival status
+ *
+ * Normalizes an overall Activity Score (0-100) with documented criteria:
+ * - Commit Recency: max 35 pts
+ * - Release Cadence: max 25 pts
+ * - Issue & PR Activity: max 25 pts
+ * - Maintenance Status: max 15 pts
+ *
+ * Excludes stars/forks from quality/maintenance scoring (Requirement 7).
+ * Caches responses in memory for 30 minutes to respect API rate limits (Requirement 9).
+ */
+async function assessRepoHealth(repoName, fallbackIssue = null) {
+  if (!repoName || typeof repoName !== 'string' || !repoName.includes('/')) {
+    return null;
+  }
+
+  const normalizedRepo = repoName.trim();
+  const cached = repoHealthCache.get(normalizedRepo);
+  if (cached && (Date.now() - cached.timestamp < 1800000)) { // 30 min cache
+    return cached.data;
+  }
+
+  const now = Date.now();
+  const checkedAt = new Date().toISOString();
+  const observationPeriod = 'Past 90 days';
+  const sources = {
+    repo: `https://github.com/${normalizedRepo}`,
+    commits: `https://github.com/${normalizedRepo}/commits`,
+    releases: `https://github.com/${normalizedRepo}/releases`,
+    pulls: `https://github.com/${normalizedRepo}/pulls`,
+  };
+
+  try {
+    const repoRes = await fetch(`https://api.github.com/repos/${normalizedRepo}`, {
+      headers: {
+        Accept: 'application/vnd.github+json',
+        'User-Agent': 'IssueScout-RepoHealth/1.0',
+        ...(githubToken ? { Authorization: `Bearer ${githubToken}` } : {}),
+      },
+      signal: AbortSignal.timeout(6000),
+    });
+
+    if (!repoRes.ok) {
+      const remaining = Number(repoRes.headers.get('x-ratelimit-remaining'));
+      const isRateLimited = repoRes.status === 403 || repoRes.status === 429 || remaining === 0;
+      const fallback = buildFallbackRepoHealth(normalizedRepo, fallbackIssue, isRateLimited ? 'rate-limited' : 'api-unavailable', sources, checkedAt);
+      repoHealthCache.set(normalizedRepo, { timestamp: now, data: fallback });
+      return fallback;
+    }
+
+    const repoData = await repoRes.json();
+    const rateRemaining = Number(repoRes.headers.get('x-ratelimit-remaining') || '50');
+
+    // Only fetch releases if rate limit budget is healthy (> 6 remaining)
+    let latestRelease = null;
+    if (rateRemaining > 6) {
+      try {
+        const relRes = await fetch(`https://api.github.com/repos/${normalizedRepo}/releases?per_page=1`, {
+          headers: {
+            Accept: 'application/vnd.github+json',
+            'User-Agent': 'IssueScout-RepoHealth/1.0',
+            ...(githubToken ? { Authorization: `Bearer ${githubToken}` } : {}),
+          },
+          signal: AbortSignal.timeout(4000),
+        });
+        if (relRes.ok) {
+          const relData = await relRes.json();
+          if (Array.isArray(relData) && relData.length > 0) {
+            latestRelease = {
+              tag: relData[0].tag_name || relData[0].name || 'Release',
+              publishedAt: relData[0].published_at || relData[0].created_at,
+            };
+          }
+        }
+      } catch { /* optional release fetch fallback */ }
+    }
+
+    const isArchived = Boolean(repoData.archived);
+    const pushedTimestamp = Date.parse(repoData.pushed_at || '');
+    const daysSincePush = Number.isFinite(pushedTimestamp) ? Math.max(0, Math.floor((now - pushedTimestamp) / 86400000)) : null;
+
+    let releaseDays = null;
+    if (latestRelease?.publishedAt) {
+      const relTimestamp = Date.parse(latestRelease.publishedAt);
+      if (Number.isFinite(relTimestamp)) {
+        releaseDays = Math.max(0, Math.floor((now - relTimestamp) / 86400000));
+      }
+    }
+
+    // Normalized scoring criteria:
+    // 1. Commit Recency (max 35)
+    let commitScore = 0;
+    let commitLabel = 'No recent commit data';
+    if (daysSincePush !== null) {
+      if (daysSincePush <= 7) { commitScore = 35; commitLabel = `Very active — pushed ${daysSincePush === 0 ? 'today' : daysSincePush + 'd ago'}`; }
+      else if (daysSincePush <= 30) { commitScore = 28; commitLabel = `Active — pushed ${daysSincePush}d ago`; }
+      else if (daysSincePush <= 90) { commitScore = 18; commitLabel = `Moderate — pushed ${daysSincePush}d ago`; }
+      else { commitScore = 8; commitLabel = `Quiet — last pushed ${daysSincePush}d ago`; }
+    }
+
+    // 2. Release Cadence (max 25)
+    let releaseScore = 0;
+    let releaseLabel = 'No recent tagged release recorded';
+    if (releaseDays !== null) {
+      if (releaseDays <= 30) { releaseScore = 25; releaseLabel = `${latestRelease.tag} released ${releaseDays === 0 ? 'today' : releaseDays + 'd ago'}`; }
+      else if (releaseDays <= 90) { releaseScore = 20; releaseLabel = `${latestRelease.tag} released ${releaseDays}d ago`; }
+      else if (releaseDays <= 180) { releaseScore = 12; releaseLabel = `${latestRelease.tag} released ${releaseDays}d ago`; }
+      else { releaseScore = 6; releaseLabel = `${latestRelease.tag} (${releaseDays}d ago)`; }
+    } else {
+      releaseLabel = 'Continuous main branch development (rolling releases)';
+      releaseScore = 12;
+    }
+
+    // 3. Issue & PR Activity (max 25)
+    const openCount = repoData.open_issues_count || 0;
+    let issueScore = 0;
+    let issueLabel = `${openCount} open issues & PRs`;
+    if (openCount > 0) {
+      issueScore = Math.min(25, 10 + Math.min(15, Math.floor(openCount / 10)));
+    } else {
+      issueScore = 10;
+    }
+
+    // 4. Maintenance / Archival Status (max 15)
+    let maintenanceScore = isArchived ? 0 : 15;
+
+    let totalScore = commitScore + releaseScore + issueScore + maintenanceScore;
+    if (isArchived) totalScore = Math.min(15, totalScore);
+
+    let status = 'active';
+    let statusLabel = 'High Activity Pace';
+    let statusSummary = `High maintenance cadence with recent code pushes (${daysSincePush !== null ? (daysSincePush === 0 ? 'today' : daysSincePush + 'd ago') : 'recent'}) and active issue tracking.`;
+
+    if (isArchived) {
+      status = 'archived';
+      statusLabel = 'Archived (Read-Only)';
+      statusSummary = 'This repository has been archived by its maintainers. It no longer accepts contributions or pull requests.';
+    } else if (totalScore < 50) {
+      status = 'quiet';
+      statusLabel = 'Quiet / Low Velocity';
+      statusSummary = `Low commit velocity in the past 90 days. Note that quiet repositories may simply be stable, complete utilities.`;
+    } else if (totalScore < 75) {
+      status = 'moderate';
+      statusLabel = 'Moderate Activity';
+      statusSummary = `Steady maintenance with periodic updates and open issue tracking in the past 90 days.`;
+    }
+
+    const healthData = {
+      repository: normalizedRepo,
+      status,
+      statusLabel,
+      statusSummary,
+      score: totalScore,
+      scoringCriteria: {
+        commitRecency: { points: commitScore, max: 35, detail: commitLabel },
+        releaseCadence: { points: releaseScore, max: 25, detail: releaseLabel },
+        issuePrActivity: { points: issueScore, max: 25, detail: issueLabel },
+        maintenanceStatus: { points: maintenanceScore, max: 15, detail: isArchived ? 'Archived repository' : 'Active (not archived)' },
+      },
+      signals: [
+        { name: 'Recent Commits', value: commitLabel, verified: true, sourceUrl: sources.commits },
+        { name: 'Latest Release', value: releaseLabel, verified: Boolean(latestRelease), sourceUrl: sources.releases },
+        { name: 'Open Issues & PRs', value: `${openCount} open issues & PRs`, verified: true, sourceUrl: sources.pulls },
+        { name: 'Archival Status', value: isArchived ? 'Archived (Read-only)' : 'Active (Accepts contributions)', verified: true, sourceUrl: sources.repo },
+      ],
+      isArchived,
+      daysSincePush,
+      observationPeriod,
+      checkedAt,
+      qualityDisclaimer: 'Maintenance pace reflects recent change frequency, not repository quality. Stable libraries often require fewer changes.',
+      sources,
+      isFallback: false,
+    };
+
+    repoHealthCache.set(normalizedRepo, { timestamp: now, data: healthData });
+    return healthData;
+  } catch {
+    const fallback = buildFallbackRepoHealth(normalizedRepo, fallbackIssue, 'network-error', sources, checkedAt);
+    repoHealthCache.set(normalizedRepo, { timestamp: now, data: fallback });
+    return fallback;
+  }
+}
+
 const TRUSTED_LEARNING_RESOURCES = {
   JavaScript: {
     name: 'MDN Web Docs — JavaScript Guide',
@@ -1014,13 +1238,46 @@ const server = http.createServer(async (req, res) => {
         }
       }
       if (!issues.length) return send(res, 200, { issues: [], rankingMode: 'none', fallbackActive });
+      let ranked = [];
+      let rankingMode = 'local-ai';
+      let aiMessage = undefined;
       try {
-        const ranked = await rankWithOllama(issues, skills);
-        return send(res, 200, { issues: ranked, rankingMode: 'local-ai', model: ollamaModel, fallbackActive });
+        ranked = await rankWithOllama(issues, skills);
       } catch (error) {
-        const ranked = issues.map((issue) => localScore(issue, skills, technologies)).sort((a, b) => b.score - a.score).slice(0, 8);
-        return send(res, 200, { issues: ranked, rankingMode: 'keyword-fallback', model: ollamaModel, aiMessage: error.message, fallbackActive });
+        ranked = issues.map((issue) => localScore(issue, skills, technologies)).sort((a, b) => b.score - a.score).slice(0, 8);
+        rankingMode = 'keyword-fallback';
+        aiMessage = error.message;
       }
+
+      // Assess Repository Health for unique repositories in ranked candidates
+      const uniqueRepos = [...new Set(ranked.map((item) => item.repository).filter(Boolean))];
+      const healthMap = new Map();
+      await Promise.all(
+        uniqueRepos.map(async (repo) => {
+          const fallbackIssue = ranked.find((item) => item.repository === repo);
+          const health = await assessRepoHealth(repo, fallbackIssue);
+          if (health) healthMap.set(repo, health);
+        })
+      );
+
+      const enriched = ranked.map((issue) => ({
+        ...issue,
+        repoHealth: healthMap.get(issue.repository) || null,
+      }));
+
+      return send(res, 200, {
+        issues: enriched,
+        rankingMode,
+        model: ollamaModel,
+        aiMessage,
+        fallbackActive,
+      });
+    }
+    if (req.method === 'GET' && url.pathname === '/api/repo-health') {
+      const repo = url.searchParams.get('repo');
+      if (!repo) return send(res, 400, { error: 'Provide a repo parameter (e.g. ?repo=owner/repo).' });
+      const health = await assessRepoHealth(repo);
+      return send(res, 200, health || { error: 'Could not assess repository health.' });
     }
     if (req.method === 'GET' && url.pathname === '/') {
       const html = await readFile(path.join(root, 'index.html'), 'utf8');

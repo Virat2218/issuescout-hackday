@@ -673,6 +673,195 @@ function renderSkillGapBlock(issue) {
 }
 
 /**
+ * Safely retrieve repository health assessment or generate fallback from issue data.
+ */
+function getIssueRepoHealth(issue) {
+  if (issue.repoHealth && typeof issue.repoHealth === 'object') {
+    return issue.repoHealth;
+  }
+
+  const repo = issue.repository || 'unknown/repository';
+  const issueAgeDays = issue.updatedAt
+    ? Math.max(0, Math.floor((Date.now() - Date.parse(issue.updatedAt)) / 86400000))
+    : null;
+
+  return {
+    repository: repo,
+    status: 'unverified',
+    statusLabel: 'Activity Data Unverified',
+    statusSummary: `Repository signals could not be fetched live over the network. Issue was updated ${issueAgeDays !== null ? (issueAgeDays === 0 ? 'today' : issueAgeDays + 'd ago') : 'recently'}.`,
+    score: null, // Avoid misleading scores when evidence is insufficient (Requirement 8)
+    scoringCriteria: null,
+    signals: [
+      { name: 'Issue Update Recency', value: issueAgeDays !== null ? `Issue updated ${issueAgeDays === 0 ? 'today' : issueAgeDays + 'd ago'}` : 'Update timestamp unavailable', verified: false, sourceUrl: issue.url || `https://github.com/${repo}` },
+      { name: 'Repository Source', value: 'Check commit & PR activity directly on GitHub', verified: false, sourceUrl: `https://github.com/${repo}` },
+    ],
+    isArchived: false,
+    daysSincePush: null,
+    observationPeriod: 'Past 90 days',
+    checkedAt: new Date().toISOString(),
+    qualityDisclaimer: 'Maintenance pace reflects recent change frequency, not code quality. Stable libraries often require fewer changes.',
+    sources: {
+      repo: `https://github.com/${repo}`,
+      commits: `https://github.com/${repo}/commits`,
+      releases: `https://github.com/${repo}/releases`,
+      pulls: `https://github.com/${repo}/pulls`,
+    },
+    isFallback: true,
+  };
+}
+
+function renderRepoHealthBadge(health) {
+  if (!health) return '';
+  const status = health.status || 'unverified';
+  let dotClass = 'dot-active';
+  if (status === 'moderate') dotClass = 'dot-moderate';
+  else if (status === 'quiet') dotClass = 'dot-quiet';
+  else if (status === 'archived') dotClass = 'dot-archived';
+  else if (status === 'estimated' || status === 'unverified') dotClass = 'dot-unverified';
+
+  return `
+    <span class="repo-health-pill status-${escapeHtml(status)}" title="Repository Health: ${escapeHtml(health.statusSummary)}">
+      <span class="repo-health-dot ${dotClass}"></span>
+      <span class="repo-health-pill-text">${escapeHtml(health.statusLabel)}</span>
+      ${health.score !== null ? `<span class="repo-health-pill-score">${health.score}/100</span>` : ''}
+    </span>
+  `;
+}
+
+function renderRepoHealthBlock(issue) {
+  const health = getIssueRepoHealth(issue);
+  const status = health.status || 'unverified';
+  const checkedDate = health.checkedAt ? new Date(health.checkedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : 'Recent';
+
+  let statusIcon = '●';
+  if (status === 'active') statusIcon = '⚡';
+  else if (status === 'moderate') statusIcon = '●';
+  else if (status === 'quiet') statusIcon = '○';
+  else if (status === 'archived') statusIcon = '⚠';
+  else statusIcon = 'ℹ';
+
+  const criteria = health.scoringCriteria;
+  const scoringHtml = criteria ? `
+    <div class="repo-scoring-breakdown">
+      <div class="scoring-breakdown-header">
+        <span class="scoring-breakdown-title">Normalized Maintenance Activity Score (0–100 Criteria):</span>
+        <span class="scoring-total-badge">${health.score}/100</span>
+      </div>
+      <div class="scoring-bars-grid">
+        <div class="scoring-bar-item">
+          <div class="bar-label-row"><span>Commit Recency (max 35)</span><strong>${criteria.commitRecency.points}/35</strong></div>
+          <div class="bar-track"><div class="bar-fill" style="width: ${Math.round((criteria.commitRecency.points / 35) * 100)}%"></div></div>
+          <span class="bar-detail">${escapeHtml(criteria.commitRecency.detail)}</span>
+        </div>
+        <div class="scoring-bar-item">
+          <div class="bar-label-row"><span>Release Cadence (max 25)</span><strong>${criteria.releaseCadence.points}/25</strong></div>
+          <div class="bar-track"><div class="bar-fill" style="width: ${Math.round((criteria.releaseCadence.points / 25) * 100)}%"></div></div>
+          <span class="bar-detail">${escapeHtml(criteria.releaseCadence.detail)}</span>
+        </div>
+        <div class="scoring-bar-item">
+          <div class="bar-label-row"><span>Issue & PR Activity (max 25)</span><strong>${criteria.issuePrActivity.points}/25</strong></div>
+          <div class="bar-track"><div class="bar-fill" style="width: ${Math.round((criteria.issuePrActivity.points / 25) * 100)}%"></div></div>
+          <span class="bar-detail">${escapeHtml(criteria.issuePrActivity.detail)}</span>
+        </div>
+        <div class="scoring-bar-item">
+          <div class="bar-label-row"><span>Maintenance Status (max 15)</span><strong>${criteria.maintenanceStatus.points}/15</strong></div>
+          <div class="bar-track"><div class="bar-fill" style="width: ${Math.round((criteria.maintenanceStatus.points / 15) * 100)}%"></div></div>
+          <span class="bar-detail">${escapeHtml(criteria.maintenanceStatus.detail)}</span>
+        </div>
+      </div>
+    </div>
+  ` : `
+    <div class="repo-score-unassigned-notice">
+      <span class="notice-icon">ℹ</span>
+      <span><b>Score unassigned:</b> Live GitHub API data was limited or offline. Scores are not fabricated when evidence is insufficient.</span>
+    </div>
+  `;
+
+  return `
+    <details class="repo-health-block" id="repo-health-${escapeHtml(issue.id || '')}">
+      <summary class="repo-health-summary-btn">
+        <div class="repo-health-summary-left">
+          <span class="repo-health-icon-wrap">
+            <svg class="icon-svg" viewBox="0 0 24 24"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+          </span>
+          <span class="repo-health-title">Repository Health Assessment</span>
+          <span class="repo-health-badge badge-${escapeHtml(status)}">
+            <span class="badge-icon">${statusIcon}</span>
+            <span>${escapeHtml(health.statusLabel)}</span>
+            ${health.score !== null ? `<span class="health-badge-score">· ${health.score}/100</span>` : ''}
+          </span>
+        </div>
+        <div class="repo-health-summary-right">
+          <span class="repo-health-hint">Inspect maintenance signals</span>
+          <svg class="icon-svg repo-health-chevron" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg>
+        </div>
+      </summary>
+
+      <div class="repo-health-content">
+        <div class="repo-health-summary-box">
+          <p class="repo-health-summary-text">${escapeHtml(health.statusSummary)}</p>
+          <div class="repo-health-meta-row">
+            <span class="meta-tag">Observation Window: ${escapeHtml(health.observationPeriod)}</span>
+            <span class="meta-tag">Checked: ${escapeHtml(checkedDate)}</span>
+            ${health.isArchived ? '<span class="meta-tag archived-tag">⚠ Archived Repository</span>' : ''}
+            ${health.isFallback ? '<span class="meta-tag fallback-tag">ℹ Rate Limit Guard (Issue Signals)</span>' : ''}
+          </div>
+        </div>
+
+        <!-- Activity vs Quality distinction (Requirement 6) -->
+        <div class="repo-health-quality-callout">
+          <svg class="icon-svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+          <p><b>Activity vs Quality Note:</b> Maintenance pace reflects recent change frequency, not code quality. Stable, battle-tested utilities often require fewer commits or releases.</p>
+        </div>
+
+        ${scoringHtml}
+
+        <!-- Verifiable Signals Grid with direct links (Requirement 2, 10) -->
+        <div class="repo-signals-grid">
+          ${(health.signals || []).map((s) => `
+            <div class="repo-signal-card ${s.verified ? 'verified' : 'unverified'}">
+              <div class="signal-header">
+                <span class="signal-name">${escapeHtml(s.name)}</span>
+                <span class="signal-status-pill ${s.verified ? 'verified-pill' : 'unverified-pill'}">${s.verified ? 'Verified' : 'Estimated'}</span>
+              </div>
+              <span class="signal-value">${escapeHtml(s.value)}</span>
+              <a class="signal-link" href="${escapeHtml(s.sourceUrl)}" target="_blank" rel="noopener noreferrer">
+                <span>View on GitHub</span>
+                <svg class="icon-svg" viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+              </a>
+            </div>
+          `).join('')}
+        </div>
+
+        <!-- Activity Sources Quick Links (Requirement 10) -->
+        <div class="repo-sources-row">
+          <span class="sources-label">Direct Activity Sources:</span>
+          <div class="sources-links-group">
+            <a class="repo-source-btn" href="${escapeHtml(health.sources.repo)}" target="_blank" rel="noopener noreferrer">
+              <span>Repository</span>
+              <svg class="icon-svg" viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+            </a>
+            <a class="repo-source-btn" href="${escapeHtml(health.sources.commits)}" target="_blank" rel="noopener noreferrer">
+              <span>Commits</span>
+              <svg class="icon-svg" viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+            </a>
+            <a class="repo-source-btn" href="${escapeHtml(health.sources.releases)}" target="_blank" rel="noopener noreferrer">
+              <span>Releases</span>
+              <svg class="icon-svg" viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+            </a>
+            <a class="repo-source-btn" href="${escapeHtml(health.sources.pulls)}" target="_blank" rel="noopener noreferrer">
+              <span>Pull Requests</span>
+              <svg class="icon-svg" viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+            </a>
+          </div>
+        </div>
+      </div>
+    </details>
+  `;
+}
+
+/**
  * Safely extract and normalize the difficulty level of an issue.
  * Supports: 'beginner', 'intermediate', 'advanced'.
  * Falls back to 'unknown' if missing or invalid.
@@ -810,16 +999,20 @@ function renderIssueCards(issues) {
     const contributingUrl = repoUrl + '/blob/HEAD/CONTRIBUTING.md';
 
     const diffBlock = renderDifficultyBlock(issue.difficulty);
+    const health = getIssueRepoHealth(issue);
+    const healthBadge = renderRepoHealthBadge(health);
+    const healthBlock = renderRepoHealthBlock(issue);
 
     return [
       '<article class="issue-card">',
-      '<div class="issue-top"><span class="repo">' + escapeHtml(issue.repository) + '</span><div class="issue-top-badges"><span class="score">' + score + '</span>' + difficultyBadge + similarBadge + '</div></div>',
+      '<div class="issue-top"><div class="issue-top-left"><span class="repo">' + escapeHtml(issue.repository) + '</span>' + healthBadge + '</div><div class="issue-top-badges"><span class="score">' + score + '</span>' + difficultyBadge + similarBadge + '</div></div>',
       '<h3 class="issue-title"><a href="' + escapeHtml(issue.url) + '" target="_blank" rel="noopener noreferrer">' + escapeHtml(issue.title) + '</a></h3>',
       '<p class="issue-reason">' + escapeHtml(issue.reason) + '</p>',
       '<div class="issue-evidence"><strong>Evidence from issue</strong>' + (evidence.length ? '<ul>' + evidence.map((item) => '<li><span class="evidence-source">' + escapeHtml(item.source) + '</span>' + (item.skill ? ' <span class="evidence-skill">[' + escapeHtml(item.skill) + ']</span>' : '') + ': "' + formatEvidenceQuote(item.quote, item.skill) + '"</li>').join('') + '</ul>' : '<p class="no-evidence">No exact skill phrase found in the issue text. Review it before relying on this match.</p>') + '</div>',
       '<div class="tags">' + tags + '</div>',
       diffBlock,
       renderSkillGapBlock(issue),
+      healthBlock,
       '<div class="issue-bottom"><span class="first-step"><b>First step</b> · ' + escapeHtml(issue.firstStep) + '</span><div class="issue-actions"><button class="pick-button' + (picked ? ' picked' : '') + '" type="button" data-issue-id="' + issueId + '" aria-pressed="' + picked + '">' + pickButtonContent + '</button><a class="guide-link" href="' + contributingUrl + '" target="_blank" rel="noopener noreferrer" title="View repository contribution guidelines"><svg class="icon-svg" viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg> <span>Guide</span></a><a class="open-link" href="' + escapeHtml(issue.url) + '" target="_blank" rel="noopener noreferrer"><span>View issue</span> <svg class="icon-svg" viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg></a></div></div>',
       '<p class="' + freshnessClass + '"><span>' + escapeHtml(freshness.label) + '</span> · ' + freshnessNote + '</p>',
       '</article>',
@@ -1070,6 +1263,9 @@ function renderLearningPathCards(issues, stage) {
 
     const stageNum = stage === 'beginner' ? '1' : stage === 'intermediate' ? '2' : '3';
     const stageName = stage.charAt(0).toUpperCase() + stage.slice(1);
+    const health = getIssueRepoHealth(issue);
+    const healthBadge = renderRepoHealthBadge(health);
+    const healthBlock = renderRepoHealthBlock(issue);
 
     return `
       <article class="issue-card learning-card stage-card--${stage}">
@@ -1079,6 +1275,7 @@ function renderLearningPathCards(issues, stage) {
             <span class="learning-stage-tag stage-${stage}">Stage ${stageNum} Recommendation</span>
             <span class="score">${score}</span>
             ${difficultyBadge}
+            ${healthBadge}
           </div>
         </div>
 
@@ -1100,6 +1297,8 @@ function renderLearningPathCards(issues, stage) {
         </div>
 
         ${renderSkillGapBlock(issue)}
+
+        ${healthBlock}
 
         <div class="issue-bottom">
           <span class="first-step"><b>Next concrete action</b> · ${escapeHtml(issue.firstStep)}</span>
@@ -1165,12 +1364,21 @@ function generateContributionPlanMarkdown() {
     const diffExplanation = item.difficulty?.explanation || 'Difficulty not determined.';
     const scoreText = Number.isFinite(Number(item.score)) ? Math.round(item.score) + '% fit' : 'Match';
     const gap = getIssueSkillGap(item);
+    const health = getIssueRepoHealth(item);
+    const healthScoreText = health.score !== null ? `${health.score}/100 activity score` : 'Activity score unassigned';
 
     md += `### ${idx + 1}. [${repo}] ${title}\n\n`;
     md += `- **Issue Link**: [View on GitHub](${url})\n`;
     md += `- **Contribution Guide**: [Read CONTRIBUTING.md](${contributingUrl})\n`;
     md += `- **Difficulty**: ${diffLevel} — ${diffExplanation}\n`;
     md += `- **Fit Score**: ${scoreText}\n`;
+    md += `- **Repository Health**: ${health.statusLabel} (${healthScoreText})\n`;
+    if (health.summary) {
+      md += `  - Health Summary: ${health.summary}\n`;
+    }
+    if (health.sources) {
+      md += `  - Activity Sources: [Commits](${health.sources.commitsUrl}) · [Pull Requests](${health.sources.pullsUrl}) · [Releases](${health.sources.releasesUrl})\n`;
+    }
     md += `- **Skill-Gap Status**: ${gap.readinessLabel} (${gap.matchingSkills.length} matching, ${gap.unconfirmedSkills.length} unconfirmed gap${gap.unconfirmedSkills.length === 1 ? '' : 's'})\n`;
     if (gap.unconfirmedSkills.length > 0) {
       md += `  - Gaps to review: ${gap.unconfirmedSkills.map((s) => s.name + (s.resources ? ` ([${s.resources.name}](${s.resources.url}))` : '')).join(', ')}\n`;
@@ -1230,6 +1438,7 @@ results.addEventListener('click', (event) => {
         matchedSkills: (issue.matchedSkills || []).slice(0, 12),
         difficulty: issue.difficulty,
         skillGap: issue.skillGap,
+        repoHealth: issue.repoHealth,
       };
       chosenIssues = Object.fromEntries(Object.entries(chosenIssues).slice(-50));
       showNotice('Marked as a pick! Similar starter issues will move higher on later searches.');
