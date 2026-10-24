@@ -245,34 +245,38 @@ function estimateDifficulty(issue) {
 
     if (scopeUpgradeCount >= 3) {
       level = 'advanced';
-      explanation = 'Labelled beginner-friendly, but scope analysis reveals advanced complexity (multiple high-weight signals detected).';
+      explanation = 'Labelled beginner-friendly, but scope suggests a broad change involving multiple components or complex subsystems.';
       confidence = 'heuristic';
       uncertainty.push('Beginner label conflicts with detected complexity signals — the label may be inaccurate.');
     } else if (scopeUpgradeCount >= 1 || intermediateScore >= 2) {
       level = 'intermediate';
-      explanation = 'Labelled beginner-friendly, but scope hints at moderate complexity (infrastructure, refactoring, or broad changes).';
+      explanation = 'Labelled beginner-friendly, but scope hints at moderate complexity (testing, infrastructure, or multi-file changes).';
       confidence = 'heuristic';
       uncertainty.push('Beginner label partially conflicts with scope signals — verify task boundaries before starting.');
     } else {
       level = 'beginner';
-      explanation = 'Issue is labelled for first-time contributors and scope analysis confirms limited complexity.';
+      explanation = 'The issue is labelled for first-time contributors and describes a small, clearly defined change.';
       confidence = 'label';
     }
   } else if (advancedScore >= 3) {
     level = 'advanced';
-    explanation = 'Multiple complexity signals detected: ' + signals.filter(s => s.weight === 'high').map(s => s.factor.toLowerCase()).slice(0, 3).join(', ') + '.';
+    explanation = 'The description suggests a broad change involving architectural refactoring, security, or multiple components.';
+    confidence = 'heuristic';
+  } else if (scopeSignals.debuggingInvestigation) {
+    level = 'intermediate';
+    explanation = 'The task appears to require debugging an existing component and validating changes with tests.';
     confidence = 'heuristic';
   } else if (intermediateScore >= 3) {
     level = 'intermediate';
-    explanation = 'Issue involves building or integrating functionality — testing, API work, or configuration changes detected.';
+    explanation = 'The task involves building or integrating functionality — API work, testing, or configuration setup detected.';
     confidence = 'heuristic';
   } else if (beginnerScore >= 2) {
     level = 'beginner';
-    explanation = 'Small, well-scoped change (typo, docs, or minor fix) — good for first contributions.';
+    explanation = 'The issue describes a small, clearly defined change (documentation, typo, or minor fix) suitable for starters.';
     confidence = 'heuristic';
   } else {
     level = 'unknown';
-    explanation = 'Not enough evidence in labels or description to estimate difficulty reliably.';
+    explanation = 'There is not enough reliable information in the available issue description to estimate the difficulty.';
     confidence = 'low';
     uncertainty.push('Consider reading the full issue thread on GitHub for additional context.');
   }
@@ -282,12 +286,28 @@ function estimateDifficulty(issue) {
     uncertainty.push('Issue shows both beginner-friendly and advanced signals — difficulty may vary depending on approach.');
   }
 
+  // ── 6. Verified source-backed facts ────────────────────────────────────
+  const sourceFacts = [];
+  if (labels.length) {
+    sourceFacts.push(`Labels: ${labels.slice(0, 3).join(', ')}`);
+  }
+  if (referencedFiles.length > 0) {
+    sourceFacts.push(`${referencedFiles.length} file${referencedFiles.length === 1 ? '' : 's'} referenced (${referencedFiles.slice(0, 2).join(', ')}${referencedFiles.length > 2 ? '…' : ''})`);
+  }
+  if (hasAcceptanceCriteria) {
+    sourceFacts.push('Has structured acceptance criteria or checklist');
+  }
+  if (hasTestRequirement) {
+    sourceFacts.push('Mentions test suite or testing requirements');
+  }
+
   return {
     level,
     explanation,
     confidence,
     signals: signals.slice(0, 6),   // cap at 6 most relevant
     uncertainty,
+    sourceFacts,
     referencedFiles: referencedFiles.length,
     bodyLength,
   };

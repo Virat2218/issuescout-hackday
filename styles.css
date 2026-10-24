@@ -1138,7 +1138,7 @@ footer {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  transition: border-color 0.2s ease;
+  transition: border-color 0.2s ease, background-color 0.2s ease;
 }
 .diff-card-block:hover {
   border-color: rgba(255, 255, 255, 0.12);
@@ -1147,44 +1147,67 @@ footer {
   border-left: 3px solid #4ade80;
 }
 .diff-block--intermediate {
-  border-left: 3px solid #facc15;
+  border-left: 3px solid #fbbf24;
 }
 .diff-block--advanced {
   border-left: 3px solid #f87171;
 }
 .diff-block--unknown {
-  border-left: 3px solid rgba(255, 255, 255, 0.2);
+  border-left: 3px solid rgba(148, 163, 184, 0.4);
 }
 
-.diff-confidence-icon {
-  margin-right: 4px;
-  font-weight: 700;
-  opacity: 0.85;
-}
-
-.diff-explanation {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  color: var(--color-text-muted);
+/* Collapsible summary for "Why this difficulty?" */
+.diff-why-summary {
+  list-style: none;
+  cursor: pointer;
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 8px;
+  gap: 10px;
+  user-select: none;
+}
+.diff-why-summary::-webkit-details-marker {
+  display: none;
+}
+.diff-why-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
   line-height: 1.45;
   flex-wrap: wrap;
 }
-.diff-explanation .icon-svg {
+.diff-info-icon {
+  width: 14px;
+  height: 14px;
   stroke: var(--color-text-muted);
   fill: none;
   stroke-width: 2;
   flex-shrink: 0;
-  margin-top: 1px;
-  width: 14px;
-  height: 14px;
+  margin-top: 2px;
+}
+.diff-why-badge {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: var(--color-text);
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 .diff-reason-text {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--color-text-muted);
+  line-height: 1.45;
   flex: 1;
-  min-width: 200px;
+  min-width: 180px;
 }
 .diff-header-tags {
   display: inline-flex;
@@ -1192,6 +1215,19 @@ footer {
   gap: 6px;
   flex-shrink: 0;
 }
+.diff-arrow {
+  width: 12px;
+  height: 12px;
+  stroke: var(--color-text-muted);
+  fill: none;
+  stroke-width: 2.2;
+  transition: transform 0.2s ease;
+  flex-shrink: 0;
+}
+details[open] .diff-arrow {
+  transform: rotate(180deg);
+}
+
 .diff-files-pill {
   font-size: 10px;
   padding: 1px 7px;
@@ -1224,25 +1260,54 @@ footer {
   border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
-/* Detected signals */
-.diff-signals {
+/* Breakdown content inside collapsible */
+.diff-breakdown-details {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed rgba(255, 255, 255, 0.08);
+  margin-top: 4px;
+}
+.diff-breakdown-group {
   display: flex;
   flex-direction: column;
   gap: 4px;
   font-family: var(--font-mono);
   font-size: 11px;
 }
-.diff-signals-heading {
-  font-size: 10px;
+.diff-group-title {
+  font-size: 9.5px;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.06em;
   color: var(--color-text-muted);
   opacity: 0.8;
+  font-weight: 600;
 }
+.diff-facts-chips,
 .diff-signals-chips {
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
+}
+.diff-fact-chip {
+  font-size: 10px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: rgba(77, 158, 255, 0.08);
+  border: 1px solid rgba(77, 158, 255, 0.25);
+  color: #93c5fd;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  line-height: 1.3;
+}
+.diff-fact-chip .icon-svg {
+  width: 10px;
+  height: 10px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 2.2;
 }
 .diff-signal-chip {
   font-size: 10px;

@@ -131,39 +131,69 @@ function renderDifficultyBadge(difficulty) {
  * Render structured difficulty section on issue cards:
  * explanation, detected signals / evidence, and uncertainty notes.
  */
+/**
+ * Render structured difficulty section on issue cards:
+ * concise evidence-based explanation, source-backed facts vs interpretation signals,
+ * and uncertainty callouts within a collapsible 'Why this difficulty?' block.
+ */
 function renderDifficultyBlock(difficulty) {
-  if (!difficulty) return '';
-  const {
-    level = 'unknown',
-    explanation = '',
-    confidence = 'low',
-    signals = [],
-    uncertainty = [],
-    referencedFiles = 0,
-  } = difficulty;
+  if (!difficulty || typeof difficulty !== 'object') {
+    return `
+      <div class="diff-card-block diff-block--unknown">
+        <div class="diff-explanation">
+          <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          <span class="diff-why-badge">Why Unknown?</span>
+          <span class="diff-reason-text">There is not enough reliable information in the available issue description to estimate the difficulty.</span>
+        </div>
+      </div>
+    `;
+  }
 
-  const confNormalized = (confidence || '').toLowerCase();
-  const confLabel = (confNormalized === 'label' || confNormalized === 'high')
+  const validLevels = ['beginner', 'intermediate', 'advanced', 'unknown'];
+  const rawLevel = (typeof difficulty.level === 'string') ? difficulty.level.toLowerCase().trim() : 'unknown';
+  const level = validLevels.includes(rawLevel) ? rawLevel : 'unknown';
+  const levelTitle = level.charAt(0).toUpperCase() + level.slice(1);
+
+  const rawExplanation = (typeof difficulty.explanation === 'string' && difficulty.explanation.trim())
+    ? difficulty.explanation.trim()
+    : 'There is not enough reliable information in the available issue description to estimate the difficulty.';
+
+  const confidence = typeof difficulty.confidence === 'string' ? difficulty.confidence.toLowerCase() : 'low';
+  const confLabel = (confidence === 'label' || confidence === 'high')
     ? 'High'
-    : (confNormalized === 'heuristic' || confNormalized === 'medium')
+    : (confidence === 'heuristic' || confidence === 'medium')
       ? 'Medium'
       : 'Low';
   const confClass = confLabel.toLowerCase();
 
-  const signalsList = Array.isArray(signals) && signals.length > 0
-    ? `<div class="diff-signals">
-        <span class="diff-signals-heading">Detected signals:</span>
+  const signals = Array.isArray(difficulty.signals) ? difficulty.signals : [];
+  const uncertainty = Array.isArray(difficulty.uncertainty) ? difficulty.uncertainty : [];
+  const sourceFacts = Array.isArray(difficulty.sourceFacts) ? difficulty.sourceFacts : [];
+  const referencedFiles = Number.isInteger(difficulty.referencedFiles) ? difficulty.referencedFiles : 0;
+
+  const factsHtml = sourceFacts.length > 0
+    ? `<div class="diff-breakdown-group">
+        <span class="diff-group-title">Verified Source Facts:</span>
+        <div class="diff-facts-chips">
+          ${sourceFacts.map((fact) => `<span class="diff-fact-chip"><svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>${escapeHtml(fact)}</span>`).join('')}
+        </div>
+      </div>`
+    : '';
+
+  const signalsHtml = signals.length > 0
+    ? `<div class="diff-breakdown-group">
+        <span class="diff-group-title">Scope & Complexity Signals:</span>
         <div class="diff-signals-chips">
           ${signals.map((s) => {
-            const factor = typeof s === 'string' ? s : (s.factor || '');
-            const weight = typeof s === 'object' && s.weight ? s.weight : 'medium';
+            const factor = typeof s === 'string' ? s : (s && s.factor ? s.factor : '');
+            const weight = typeof s === 'object' && s && s.weight ? s.weight : 'medium';
             return `<span class="diff-signal-chip weight-${escapeHtml(weight)}">${escapeHtml(factor)}</span>`;
           }).join('')}
         </div>
       </div>`
     : '';
 
-  const uncertaintyList = Array.isArray(uncertainty) && uncertainty.length > 0
+  const uncertaintyHtml = uncertainty.length > 0
     ? `<div class="diff-uncertainty">
         <span class="diff-uncertainty-icon">⚠</span>
         <div class="diff-uncertainty-text">
@@ -176,19 +206,44 @@ function renderDifficultyBlock(difficulty) {
     ? `<span class="diff-files-pill">${referencedFiles} referenced file${referencedFiles === 1 ? '' : 's'}</span>`
     : '';
 
-  return `
-    <div class="diff-card-block diff-block--${level}">
-      <div class="diff-explanation">
-        <svg class="icon-svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
-        <span class="diff-reason-text">${escapeHtml(explanation)}</span>
-        <div class="diff-header-tags">
-          ${filesTag}
-          <span class="diff-conf-badge conf-${confClass}" title="Confidence level">${confLabel} confidence</span>
+  const hasExtraDetails = factsHtml || signalsHtml || uncertaintyHtml;
+
+  if (!hasExtraDetails) {
+    return `
+      <div class="diff-card-block diff-block--${level}">
+        <div class="diff-explanation">
+          <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+          <span class="diff-why-badge">Why ${levelTitle}?</span>
+          <span class="diff-reason-text">${escapeHtml(rawExplanation)}</span>
+          <div class="diff-header-tags">
+            ${filesTag}
+            <span class="diff-conf-badge conf-${confClass}" title="Confidence: ${confLabel}">${confLabel} confidence</span>
+          </div>
         </div>
       </div>
-      ${signalsList}
-      ${uncertaintyList}
-    </div>
+    `;
+  }
+
+  return `
+    <details class="diff-card-block diff-block--${level}">
+      <summary class="diff-why-summary">
+        <div class="diff-explanation">
+          <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+          <span class="diff-why-badge">Why ${levelTitle}?</span>
+          <span class="diff-reason-text">${escapeHtml(rawExplanation)}</span>
+        </div>
+        <div class="diff-header-tags">
+          ${filesTag}
+          <span class="diff-conf-badge conf-${confClass}" title="Confidence: ${confLabel}">${confLabel} confidence</span>
+          <svg class="icon-svg diff-arrow" viewBox="0 0 24 24" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
+        </div>
+      </summary>
+      <div class="diff-breakdown-details">
+        ${factsHtml}
+        ${signalsHtml}
+        ${uncertaintyHtml}
+      </div>
+    </details>
   `;
 }
 
