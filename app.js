@@ -596,10 +596,32 @@ function renderSkillGapBlock(issue) {
           ${warningHtml}
         </div>
 
-        <div class="skill-gap-categories-grid">
+        <!-- Category Navigation & Swipe Hints -->
+        <div class="skill-gap-nav-row">
+          <div class="skill-cat-pills" role="tablist" aria-label="Category selector">
+            <button class="skill-cat-pill active" type="button" data-cat="matching" aria-label="View matching skills">
+              <span class="cat-pill-dot dot-matching"></span>
+              <span>Matching (${gap.matchingSkills.length})</span>
+            </button>
+            <button class="skill-cat-pill" type="button" data-cat="unconfirmed" aria-label="View unconfirmed skill gaps">
+              <span class="cat-pill-dot dot-unconfirmed"></span>
+              <span>Unconfirmed Gaps (${gap.unconfirmedSkills.length})</span>
+            </button>
+            <button class="skill-cat-pill" type="button" data-cat="helpful" aria-label="View helpful skills">
+              <span class="cat-pill-dot dot-helpful"></span>
+              <span>Helpful (${gap.helpfulSkills.length})</span>
+            </button>
+          </div>
+          <span class="skill-swipe-indicator" title="Swipe or click category tabs to view all 3 columns">
+            <span>Swipe columns</span>
+            <svg class="icon-svg" viewBox="0 0 24 24"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+          </span>
+        </div>
+
+        <div class="skill-gap-categories-grid" tabindex="0" role="region" aria-label="Skill categories carousel">
           
           <!-- Category 1: Matching Skills -->
-          <div class="skill-category-col cat-matching">
+          <div class="skill-category-col cat-matching" data-category="matching">
             <div class="cat-header">
               <span class="cat-icon-badge">✓</span>
               <div class="cat-title-wrap">
@@ -613,7 +635,7 @@ function renderSkillGapBlock(issue) {
           </div>
 
           <!-- Category 2: Missing or Unverified Skills -->
-          <div class="skill-category-col cat-unconfirmed">
+          <div class="skill-category-col cat-unconfirmed" data-category="unconfirmed">
             <div class="cat-header">
               <span class="cat-icon-badge">!</span>
               <div class="cat-title-wrap">
@@ -627,7 +649,7 @@ function renderSkillGapBlock(issue) {
           </div>
 
           <!-- Category 3: Additional Helpful Skills -->
-          <div class="skill-category-col cat-helpful">
+          <div class="skill-category-col cat-helpful" data-category="helpful">
             <div class="cat-header">
               <span class="cat-icon-badge">+</span>
               <div class="cat-title-wrap">
@@ -1169,6 +1191,24 @@ function generateContributionPlanMarkdown() {
 }
 
 results.addEventListener('click', (event) => {
+  // 0. Skill-Gap Category navigation pill click
+  const catPill = event.target.closest('.skill-cat-pill');
+  if (catPill) {
+    const parentBlock = catPill.closest('.skill-gap-block');
+    if (!parentBlock) return;
+    const cat = catPill.dataset.cat;
+    const targetCol = parentBlock.querySelector(`.skill-category-col[data-category="${cat}"]`);
+    const grid = parentBlock.querySelector('.skill-gap-categories-grid');
+    if (targetCol && grid) {
+      const scrollPos = targetCol.offsetLeft - grid.offsetLeft - 8;
+      grid.scrollTo({ left: Math.max(0, scrollPos), behavior: 'smooth' });
+    }
+    parentBlock.querySelectorAll('.skill-cat-pill').forEach((p) => {
+      p.classList.toggle('active', p === catPill);
+    });
+    return;
+  }
+
   // 1. Pick button
   const pickButton = event.target.closest('.pick-button');
   if (pickButton) {
@@ -1250,6 +1290,33 @@ results.addEventListener('click', (event) => {
     return;
   }
 });
+
+// Sync active category pill when user swipes or scrolls the skill-gap grid
+results.addEventListener('scroll', (event) => {
+  const grid = event.target.closest?.('.skill-gap-categories-grid') || (event.target.classList?.contains('skill-gap-categories-grid') ? event.target : null);
+  if (!grid) return;
+  const parentBlock = grid.closest('.skill-gap-block');
+  if (!parentBlock) return;
+  const cols = Array.from(grid.querySelectorAll('.skill-category-col'));
+  if (!cols.length) return;
+
+  const scrollLeft = grid.scrollLeft;
+  let activeCol = cols[0];
+  let minDiff = Infinity;
+
+  cols.forEach((col) => {
+    const diff = Math.abs((col.offsetLeft - grid.offsetLeft) - scrollLeft);
+    if (diff < minDiff) {
+      minDiff = diff;
+      activeCol = col;
+    }
+  });
+
+  const activeCat = activeCol.dataset.category;
+  parentBlock.querySelectorAll('.skill-cat-pill').forEach((pill) => {
+    pill.classList.toggle('active', pill.dataset.cat === activeCat);
+  });
+}, { capture: true, passive: true });
 
 clearPicksButton?.addEventListener('click', () => {
   chosenIssues = {};

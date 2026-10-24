@@ -2100,21 +2100,124 @@ details[open] .diff-arrow {
   margin-top: 2px;
 }
 
-/* 3 Categories Grid */
+/* Category Navigation & Swipe Hints */
+.skill-gap-nav-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.skill-cat-pills {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(255, 255, 255, 0.03);
+  padding: 3px 6px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  overflow-x: auto;
+  max-width: 100%;
+}
+
+.skill-cat-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: transparent;
+  border: none;
+  color: var(--color-text-muted);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+}
+.skill-cat-pill:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.06);
+}
+.skill-cat-pill.active {
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+  font-weight: 600;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+}
+.cat-pill-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  display: inline-block;
+}
+.dot-matching { background: #4ade80; }
+.dot-unconfirmed { background: #facc15; }
+.dot-helpful { background: #38bdf8; }
+
+.skill-swipe-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--color-text-muted);
+  opacity: 0.8;
+  user-select: none;
+}
+.skill-swipe-indicator .icon-svg {
+  width: 12px;
+  height: 12px;
+  stroke: var(--color-accent);
+  stroke-width: 2.2;
+}
+
+/* 3 Categories Swipeable Container (Smooth Horizontal Swipe) */
 .skill-gap-categories-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  display: flex;
   gap: 12px;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+  scroll-behavior: smooth;
+  padding: 4px 2px 10px 2px;
+  margin: 0 -2px;
+  cursor: grab;
+}
+.skill-gap-categories-grid:active {
+  cursor: grabbing;
+}
+
+/* Sleek custom scrollbar */
+.skill-gap-categories-grid::-webkit-scrollbar {
+  height: 6px;
+}
+.skill-gap-categories-grid::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 999px;
+}
+.skill-gap-categories-grid::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.18);
+  border-radius: 999px;
+}
+.skill-gap-categories-grid::-webkit-scrollbar-thumb:hover {
+  background: rgba(184, 255, 87, 0.5);
 }
 
 .skill-category-col {
   background: rgba(255, 255, 255, 0.02);
   border: 1px solid rgba(255, 255, 255, 0.07);
   border-radius: 8px;
-  padding: 10px;
+  padding: 10px 12px;
   display: flex;
   flex-direction: column;
   gap: 8px;
+  flex: 0 0 280px;
+  min-width: 260px;
+  max-width: 340px;
+  scroll-snap-align: start;
+  scroll-margin-left: 8px;
 }
 .skill-category-col.cat-matching {
   border-top: 2px solid #4ade80;
@@ -2333,9 +2436,10 @@ details[open] .diff-arrow {
   line-height: 1.4;
 }
 
-@media (max-width: 900px) {
-  .skill-gap-categories-grid {
-    grid-template-columns: 1fr;
+@media (max-width: 600px) {
+  .skill-category-col {
+    flex: 0 0 calc(90% - 6px);
+    min-width: 240px;
   }
 }
 
