@@ -285,6 +285,371 @@ function renderDifficultyBlock(difficulty) {
   `;
 }
 
+const TRUSTED_LEARNING_RESOURCES = {
+  JavaScript: {
+    name: 'MDN Web Docs — JavaScript',
+    url: 'https://developer.mozilla.org/en-US/docs/Web/JavaScript',
+    description: 'Official beginner-friendly guide to JavaScript syntax and features.',
+  },
+  TypeScript: {
+    name: 'TypeScript Official Handbook',
+    url: 'https://www.typescriptlang.org/docs/handbook/intro.html',
+    description: 'Official introduction to types, interfaces, and compiler basics.',
+  },
+  Python: {
+    name: 'Python Official Tutorial',
+    url: 'https://docs.python.org/3/tutorial/',
+    description: 'Official standard library guide covering Python essentials.',
+  },
+  React: {
+    name: 'React Official Docs — Quick Start',
+    url: 'https://react.dev/learn',
+    description: 'Interactive introduction to components, state, hooks, and props.',
+  },
+  'Node.js': {
+    name: 'Node.js Official Documentation',
+    url: 'https://nodejs.org/en/learn',
+    description: 'Official guide to Node.js modules, event loops, and asynchronous I/O.',
+  },
+  HTML: {
+    name: 'MDN Web Docs — HTML Basics',
+    url: 'https://developer.mozilla.org/en-US/docs/Learn/HTML',
+    description: 'Structured guide on HTML5 elements, semantic structure, and accessibility.',
+  },
+  CSS: {
+    name: 'MDN Web Docs — CSS First Steps',
+    url: 'https://developer.mozilla.org/en-US/docs/Learn/CSS',
+    description: 'Comprehensive reference for CSS selectors, layouts, Flexbox, and Grid.',
+  },
+  'Git / PR Workflow': {
+    name: 'GitHub Docs — Contributing to Projects',
+    url: 'https://docs.github.com/en/get-started/exploring-projects-on-github/contributing-to-a-project',
+    description: 'Official guide on forking, branching, commits, and Pull Requests.',
+  },
+  Jest: {
+    name: 'Jest Official Getting Started',
+    url: 'https://jestjs.io/docs/getting-started',
+    description: 'Quickstart on writing assertions and running JavaScript unit tests.',
+  },
+  Pytest: {
+    name: 'Pytest Official Documentation',
+    url: 'https://docs.pytest.org/en/stable/getting-started.html',
+    description: 'Beginner guide to writing and running Python test cases.',
+  },
+  Go: {
+    name: 'Go Official Tutorial',
+    url: 'https://go.dev/doc/tutorial/getting-started',
+    description: 'Official tutorial covering Go packages, functions, and testing.',
+  },
+  Rust: {
+    name: 'The Rust Programming Language Book',
+    url: 'https://doc.rust-lang.org/book/',
+    description: 'Official open-source book introducing Rust syntax and cargo.',
+  },
+  Docker: {
+    name: 'Docker Official Get Started Guide',
+    url: 'https://docs.docker.com/get-started/',
+    description: 'Introduction to Dockerfiles, images, and container environments.',
+  },
+  Markdown: {
+    name: 'The Markdown Guide',
+    url: 'https://www.markdownguide.org/getting-started/',
+    description: 'Clear reference for formatting documentation, tables, and comments.',
+  },
+  GraphQL: {
+    name: 'GraphQL Official Documentation',
+    url: 'https://graphql.org/learn/',
+    description: 'Official guide on queries, schemas, and GraphQL API fundamentals.',
+  },
+  Vue: {
+    name: 'Vue.js Official Guide',
+    url: 'https://vuejs.org/guide/introduction.html',
+    description: 'Official quick start covering Vue reactive state and templates.',
+  },
+  SQL: {
+    name: 'MDN Web Docs — SQL Reference',
+    url: 'https://developer.mozilla.org/en-US/docs/Glossary/SQL',
+    description: 'Introductory reference to database queries, tables, and CRUD operations.',
+  },
+  'GitHub Actions / CI': {
+    name: 'GitHub Actions Quickstart',
+    url: 'https://docs.github.com/en/actions/quickstart',
+    description: 'Official guide to workflow YAML syntax, automated tests, and CI/CD runs.',
+  },
+};
+
+/**
+ * Retrieve skill-gap analysis object from issue or calculate client-side fallback.
+ */
+function getIssueSkillGap(issue) {
+  if (issue.skillGap && Array.isArray(issue.skillGap.matchingSkills)) {
+    return issue.skillGap;
+  }
+
+  const enteredSkills = (input?.value || '').split(',').map((s) => s.trim()).filter(Boolean);
+  const enteredTech = (technologyInput?.value || '').split(',').map((s) => s.trim()).filter(Boolean);
+  const userSet = new Set([...enteredSkills, ...enteredTech].map((s) => s.toLowerCase()));
+
+  const matched = (issue.matchedSkills || []).map((s) => ({
+    name: s,
+    required: true,
+    reason: `Directly matches your entered skill: ${s}`,
+    evidence: 'Found in issue text / labels',
+  }));
+
+  const candidateGaps = [];
+  const text = `${issue.title || ''} ${issue.body || ''} ${(issue.labels || []).join(' ')}`.toLowerCase();
+
+  if (/\btypescript\b|\bts\b|\.tsx?\b/.test(text) && !userSet.has('typescript') && !userSet.has('ts')) {
+    candidateGaps.push({
+      name: 'TypeScript',
+      required: true,
+      reason: 'Issue mentions TypeScript or includes .ts/.tsx files requiring type definitions.',
+      evidence: 'Detected in issue text / file extensions',
+      resources: TRUSTED_LEARNING_RESOURCES.TypeScript,
+    });
+  }
+  if (/\bpython\b|\.py\b/.test(text) && !userSet.has('python') && !userSet.has('py')) {
+    candidateGaps.push({
+      name: 'Python',
+      required: true,
+      reason: 'Issue requires Python code changes or script execution.',
+      evidence: 'Detected in issue text / file extensions',
+      resources: TRUSTED_LEARNING_RESOURCES.Python,
+    });
+  }
+  if (/\bdocker\b|dockerfile/i.test(text) && !userSet.has('docker')) {
+    candidateGaps.push({
+      name: 'Docker',
+      required: true,
+      reason: 'Service containerization or Docker configuration is referenced.',
+      evidence: 'Detected in issue text',
+      resources: TRUSTED_LEARNING_RESOURCES.Docker,
+    });
+  }
+
+  const helpful = [];
+  if (/\bjest\b/.test(text)) {
+    helpful.push({
+      name: 'Jest',
+      required: false,
+      reason: 'Unit tests in this project use Jest assertions.',
+      evidence: 'Mentioned in test instructions',
+      resources: TRUSTED_LEARNING_RESOURCES.Jest,
+    });
+  }
+  if (!userSet.has('git') && !userSet.has('git / pr workflow')) {
+    helpful.push({
+      name: 'Git / PR Workflow',
+      required: false,
+      reason: 'Forking, branching, and opening a clean Pull Request on GitHub.',
+      evidence: 'General contribution process',
+      resources: TRUSTED_LEARNING_RESOURCES['Git / PR Workflow'],
+    });
+  }
+
+  const unconfirmedCount = candidateGaps.length;
+  let readiness = 'ready';
+  let readinessLabel = 'Ready to Start';
+  let readinessSummary = 'You have entered the primary skills required for this issue.';
+
+  if (unconfirmedCount === 1) {
+    readiness = 'moderate';
+    readinessLabel = '1 Unconfirmed Skill Gap';
+    readinessSummary = `You match most skills, but ${candidateGaps[0].name} is unconfirmed in your profile. Review the guide below if needed.`;
+  } else if (unconfirmedCount > 1) {
+    readiness = 'needs-prep';
+    readinessLabel = `${unconfirmedCount} Unconfirmed Skill Gaps`;
+    readinessSummary = `The issue requires ${candidateGaps.map((s) => s.name).join(', ')}. Review the official learning resources below before contributing.`;
+  }
+
+  return {
+    readiness,
+    readinessLabel,
+    readinessSummary,
+    matchingSkills: matched,
+    unconfirmedSkills: candidateGaps,
+    helpfulSkills: helpful,
+    totalRequired: matched.length + candidateGaps.length,
+    unclearDescription: false,
+    unclearWarning: null,
+  };
+}
+
+/**
+ * Render the dedicated Skill-Gap Analysis block with three distinct categories:
+ * 1. Matching skills
+ * 2. Missing or unverified skills (with verified official guides)
+ * 3. Additional helpful skills
+ */
+function renderSkillGapBlock(issue) {
+  const gap = getIssueSkillGap(issue);
+  const readiness = gap.readiness || 'ready';
+  const readinessLabel = gap.readinessLabel || 'Ready to Start';
+
+  let readinessBadgeClass = 'gap-badge-ready';
+  let readinessIcon = '✓';
+  if (readiness === 'moderate') {
+    readinessBadgeClass = 'gap-badge-moderate';
+    readinessIcon = '⌕';
+  } else if (readiness === 'needs-prep') {
+    readinessBadgeClass = 'gap-badge-needs-prep';
+    readinessIcon = '!';
+  } else if (readiness === 'unconfirmed') {
+    readinessBadgeClass = 'gap-badge-unconfirmed';
+    readinessIcon = '?';
+  }
+
+  const matchingHtml = gap.matchingSkills.length
+    ? gap.matchingSkills.map((item) => `
+        <div class="skill-item-card match">
+          <div class="skill-item-top">
+            <span class="skill-item-name"><span class="item-status-icon">✓</span>${escapeHtml(item.name)}</span>
+            <span class="skill-type-tag required">Required</span>
+          </div>
+          <p class="skill-item-reason">${escapeHtml(item.reason)}</p>
+          <span class="skill-item-evidence">Source: ${escapeHtml(item.evidence)}</span>
+        </div>
+      `).join('')
+    : `<div class="cat-empty-notice">No exact matches with your search input. Check unconfirmed & helpful skills below.</div>`;
+
+  const unconfirmedHtml = gap.unconfirmedSkills.length
+    ? gap.unconfirmedSkills.map((item) => {
+        const res = item.resources;
+        const resLink = res
+          ? `<a class="skill-resource-link" href="${escapeHtml(res.url)}" target="_blank" rel="noopener noreferrer" title="Official beginner guide for ${escapeHtml(item.name)}">
+               <svg class="icon-svg" viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+               <span>${escapeHtml(res.name)}</span>
+             </a>`
+          : '';
+        return `
+          <div class="skill-item-card unconfirmed">
+            <div class="skill-item-top">
+              <span class="skill-item-name"><span class="item-status-icon">!</span>${escapeHtml(item.name)}</span>
+              <span class="skill-type-tag unconfirmed-tag">Unconfirmed</span>
+            </div>
+            <p class="skill-item-reason">${escapeHtml(item.reason)}</p>
+            ${res ? `<p class="skill-resource-desc">${escapeHtml(res.description)}</p>` : ''}
+            <div class="skill-item-bottom">
+              <span class="skill-item-evidence">Evidence: ${escapeHtml(item.evidence)}</span>
+              ${resLink}
+            </div>
+          </div>
+        `;
+      }).join('')
+    : `<div class="cat-all-clear">✓ All primary skills required by this issue match your entered profile!</div>`;
+
+  const helpfulHtml = gap.helpfulSkills.length
+    ? gap.helpfulSkills.map((item) => {
+        const res = item.resources;
+        const resLink = res
+          ? `<a class="skill-resource-link helpful" href="${escapeHtml(res.url)}" target="_blank" rel="noopener noreferrer">
+               <svg class="icon-svg" viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+               <span>${escapeHtml(res.name)}</span>
+             </a>`
+          : '';
+        return `
+          <div class="skill-item-card helpful">
+            <div class="skill-item-top">
+              <span class="skill-item-name"><span class="item-status-icon">+</span>${escapeHtml(item.name)}</span>
+              <span class="skill-type-tag helpful-tag">Helpful</span>
+            </div>
+            <p class="skill-item-reason">${escapeHtml(item.reason)}</p>
+            <div class="skill-item-bottom">
+              <span class="skill-item-evidence">${escapeHtml(item.evidence)}</span>
+              ${resLink}
+            </div>
+          </div>
+        `;
+      }).join('')
+    : `<div class="cat-empty-notice">No additional tools or workflows flagged.</div>`;
+
+  const warningHtml = gap.unclearWarning
+    ? `<div class="skill-gap-unclear-box">
+         <svg class="icon-svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+         <span>${escapeHtml(gap.unclearWarning)}</span>
+       </div>`
+    : '';
+
+  return `
+    <details class="skill-gap-block" id="skill-gap-${escapeHtml(issue.id || '')}">
+      <summary class="skill-gap-summary-btn">
+        <div class="skill-gap-summary-left">
+          <span class="skill-gap-icon-wrap">
+            <svg class="icon-svg" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+          </span>
+          <span class="skill-gap-title">Skill-Gap Analysis</span>
+          <span class="skill-gap-badge ${readinessBadgeClass}">
+            <span class="badge-icon">${readinessIcon}</span>
+            <span>${escapeHtml(readinessLabel)}</span>
+          </span>
+        </div>
+        <div class="skill-gap-summary-right">
+          <span class="gap-toggle-hint">Review gaps & resources</span>
+          <svg class="icon-svg skill-gap-chevron" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg>
+        </div>
+      </summary>
+
+      <div class="skill-gap-content">
+        <div class="skill-gap-verdict-row">
+          <p class="skill-gap-verdict-text">${escapeHtml(gap.readinessSummary)}</p>
+          ${warningHtml}
+        </div>
+
+        <div class="skill-gap-categories-grid">
+          
+          <!-- Category 1: Matching Skills -->
+          <div class="skill-category-col cat-matching">
+            <div class="cat-header">
+              <span class="cat-icon-badge">✓</span>
+              <div class="cat-title-wrap">
+                <strong>Matching Skills</strong>
+                <span class="cat-sub">${gap.matchingSkills.length} verified in your profile</span>
+              </div>
+            </div>
+            <div class="cat-items">
+              ${matchingHtml}
+            </div>
+          </div>
+
+          <!-- Category 2: Missing or Unverified Skills -->
+          <div class="skill-category-col cat-unconfirmed">
+            <div class="cat-header">
+              <span class="cat-icon-badge">!</span>
+              <div class="cat-title-wrap">
+                <strong>Unconfirmed Skills (Gaps)</strong>
+                <span class="cat-sub">${gap.unconfirmedSkills.length} required · unconfirmed</span>
+              </div>
+            </div>
+            <div class="cat-items">
+              ${unconfirmedHtml}
+            </div>
+          </div>
+
+          <!-- Category 3: Additional Helpful Skills -->
+          <div class="skill-category-col cat-helpful">
+            <div class="cat-header">
+              <span class="cat-icon-badge">+</span>
+              <div class="cat-title-wrap">
+                <strong>Additional Helpful Skills</strong>
+                <span class="cat-sub">${gap.helpfulSkills.length} optional / inferred workflows</span>
+              </div>
+            </div>
+            <div class="cat-items">
+              ${helpfulHtml}
+            </div>
+          </div>
+
+        </div>
+
+        <div class="skill-gap-footer-note">
+          <span class="note-disclaimer"><b>Guidance:</b> Unconfirmed skills are not assumed missing — they simply were not listed in your search skills. Click the official learning guides above to review documentation before opening a PR.</span>
+        </div>
+      </div>
+    </details>
+  `;
+}
+
 /**
  * Safely extract and normalize the difficulty level of an issue.
  * Supports: 'beginner', 'intermediate', 'advanced'.
@@ -432,6 +797,7 @@ function renderIssueCards(issues) {
       '<div class="issue-evidence"><strong>Evidence from issue</strong>' + (evidence.length ? '<ul>' + evidence.map((item) => '<li><span class="evidence-source">' + escapeHtml(item.source) + '</span>' + (item.skill ? ' <span class="evidence-skill">[' + escapeHtml(item.skill) + ']</span>' : '') + ': "' + formatEvidenceQuote(item.quote, item.skill) + '"</li>').join('') + '</ul>' : '<p class="no-evidence">No exact skill phrase found in the issue text. Review it before relying on this match.</p>') + '</div>',
       '<div class="tags">' + tags + '</div>',
       diffBlock,
+      renderSkillGapBlock(issue),
       '<div class="issue-bottom"><span class="first-step"><b>First step</b> · ' + escapeHtml(issue.firstStep) + '</span><div class="issue-actions"><button class="pick-button' + (picked ? ' picked' : '') + '" type="button" data-issue-id="' + issueId + '" aria-pressed="' + picked + '">' + pickButtonContent + '</button><a class="guide-link" href="' + contributingUrl + '" target="_blank" rel="noopener noreferrer" title="View repository contribution guidelines"><svg class="icon-svg" viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg> <span>Guide</span></a><a class="open-link" href="' + escapeHtml(issue.url) + '" target="_blank" rel="noopener noreferrer"><span>View issue</span> <svg class="icon-svg" viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg></a></div></div>',
       '<p class="' + freshnessClass + '"><span>' + escapeHtml(freshness.label) + '</span> · ' + freshnessNote + '</p>',
       '</article>',
@@ -711,6 +1077,8 @@ function renderLearningPathCards(issues, stage) {
           </div>
         </div>
 
+        ${renderSkillGapBlock(issue)}
+
         <div class="issue-bottom">
           <span class="first-step"><b>Next concrete action</b> · ${escapeHtml(issue.firstStep)}</span>
           <div class="learning-actions-row">
@@ -774,12 +1142,17 @@ function generateContributionPlanMarkdown() {
     const diffLevel = item.difficulty?.level ? (item.difficulty.level.charAt(0).toUpperCase() + item.difficulty.level.slice(1)) : 'Unknown';
     const diffExplanation = item.difficulty?.explanation || 'Difficulty not determined.';
     const scoreText = Number.isFinite(Number(item.score)) ? Math.round(item.score) + '% fit' : 'Match';
+    const gap = getIssueSkillGap(item);
 
     md += `### ${idx + 1}. [${repo}] ${title}\n\n`;
     md += `- **Issue Link**: [View on GitHub](${url})\n`;
     md += `- **Contribution Guide**: [Read CONTRIBUTING.md](${contributingUrl})\n`;
     md += `- **Difficulty**: ${diffLevel} — ${diffExplanation}\n`;
     md += `- **Fit Score**: ${scoreText}\n`;
+    md += `- **Skill-Gap Status**: ${gap.readinessLabel} (${gap.matchingSkills.length} matching, ${gap.unconfirmedSkills.length} unconfirmed gap${gap.unconfirmedSkills.length === 1 ? '' : 's'})\n`;
+    if (gap.unconfirmedSkills.length > 0) {
+      md += `  - Gaps to review: ${gap.unconfirmedSkills.map((s) => s.name + (s.resources ? ` ([${s.resources.name}](${s.resources.url}))` : '')).join(', ')}\n`;
+    }
     md += `- **Matched Skills**: ${skills}\n`;
     md += `- **First Concrete Step**: ${step}\n\n`;
     md += `**Action Checklist**:\n`;
@@ -816,6 +1189,7 @@ results.addEventListener('click', (event) => {
         labels: (issue.labels || []).slice(0, 12),
         matchedSkills: (issue.matchedSkills || []).slice(0, 12),
         difficulty: issue.difficulty,
+        skillGap: issue.skillGap,
       };
       chosenIssues = Object.fromEntries(Object.entries(chosenIssues).slice(-50));
       showNotice('Marked as a pick! Similar starter issues will move higher on later searches.');

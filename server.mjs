@@ -516,6 +516,313 @@ async function searchGitHub(skills = [], technologies = []) {
   return { issues, fallbackActive };
 }
 
+const TRUSTED_LEARNING_RESOURCES = {
+  JavaScript: {
+    name: 'MDN Web Docs — JavaScript Guide',
+    url: 'https://developer.mozilla.org/en-US/docs/Web/JavaScript',
+    description: 'Official beginner-friendly reference for JavaScript syntax, functions, and modern ES features.',
+  },
+  TypeScript: {
+    name: 'TypeScript Official Handbook',
+    url: 'https://www.typescriptlang.org/docs/handbook/intro.html',
+    description: 'Official guide to types, interfaces, compiler options, and type safety.',
+  },
+  Python: {
+    name: 'Python Official Tutorial',
+    url: 'https://docs.python.org/3/tutorial/',
+    description: 'Official standard library tutorial covering Python essentials and modules.',
+  },
+  React: {
+    name: 'React Official Docs — Quick Start',
+    url: 'https://react.dev/learn',
+    description: 'Interactive introduction to components, state, hooks, and props.',
+  },
+  'Node.js': {
+    name: 'Node.js Official Documentation',
+    url: 'https://nodejs.org/en/learn',
+    description: 'Official guide to Node.js modules, event loops, and asynchronous I/O.',
+  },
+  HTML: {
+    name: 'MDN Web Docs — HTML Basics',
+    url: 'https://developer.mozilla.org/en-US/docs/Learn/HTML',
+    description: 'Structured guide on HTML5 elements, semantic structure, and accessibility.',
+  },
+  CSS: {
+    name: 'MDN Web Docs — CSS First Steps',
+    url: 'https://developer.mozilla.org/en-US/docs/Learn/CSS',
+    description: 'Comprehensive reference for CSS selectors, layouts, Flexbox, and Grid.',
+  },
+  'Git / PR Workflow': {
+    name: 'GitHub Docs — Contributing to Projects',
+    url: 'https://docs.github.com/en/get-started/exploring-projects-on-github/contributing-to-a-project',
+    description: 'Official step-by-step walkthrough on forking, branching, commits, and Pull Requests.',
+  },
+  Jest: {
+    name: 'Jest Official Getting Started',
+    url: 'https://jestjs.io/docs/getting-started',
+    description: 'Official quickstart on writing assertions, mocks, and running JavaScript unit tests.',
+  },
+  Pytest: {
+    name: 'Pytest Official Documentation',
+    url: 'https://docs.pytest.org/en/stable/getting-started.html',
+    description: 'Official beginner guide to writing and running Python test cases.',
+  },
+  Go: {
+    name: 'Go Official Tutorial: Get Started',
+    url: 'https://go.dev/doc/tutorial/getting-started',
+    description: 'Official tutorial covering Go packages, functions, and testing.',
+  },
+  Rust: {
+    name: 'The Rust Programming Language Book',
+    url: 'https://doc.rust-lang.org/book/',
+    description: 'Official open-source book introducing Rust syntax, ownership, and cargo.',
+  },
+  Docker: {
+    name: 'Docker Official Get Started Guide',
+    url: 'https://docs.docker.com/get-started/',
+    description: 'Step-by-step introduction to Dockerfiles, images, and container environments.',
+  },
+  Markdown: {
+    name: 'The Markdown Guide',
+    url: 'https://www.markdownguide.org/getting-started/',
+    description: 'Clear reference for formatting documentation, tables, and issue comments.',
+  },
+  GraphQL: {
+    name: 'GraphQL Official Documentation',
+    url: 'https://graphql.org/learn/',
+    description: 'Official guide on queries, schemas, and GraphQL API fundamentals.',
+  },
+  Vue: {
+    name: 'Vue.js Official Guide',
+    url: 'https://vuejs.org/guide/introduction.html',
+    description: 'Official quick start covering Vue reactive state and component templates.',
+  },
+  SQL: {
+    name: 'MDN Web Docs — SQL Reference',
+    url: 'https://developer.mozilla.org/en-US/docs/Glossary/SQL',
+    description: 'Introductory reference to database queries, tables, and CRUD operations.',
+  },
+  'GitHub Actions / CI': {
+    name: 'GitHub Actions Quickstart',
+    url: 'https://docs.github.com/en/actions/quickstart',
+    description: 'Official guide to workflow YAML syntax, automated tests, and CI/CD runs.',
+  },
+};
+
+/**
+ * Perform a rigorous Skill-Gap Analysis comparing the user's entered skills
+ * with the skills required and inferred from a GitHub issue.
+ * Categorizes into:
+ * 1. Matching skills (user entered + issue requires)
+ * 2. Missing or unverified skills (required by issue, but unconfirmed in user skills)
+ * 3. Additional helpful skills (tools, testing, PR workflow)
+ */
+function analyzeSkillGap(issue, userSkills = [], technologies = []) {
+  const title = String(issue.title || '');
+  const body = String(issue.body || '');
+  const labels = issue.labels || [];
+  const labelStr = labels.join(' ').toLowerCase();
+  const text = `${title} ${body} ${labelStr}`.toLowerCase();
+  const refFiles = detectReferencedFiles(body);
+
+  const normalizedUserSkills = new Set(
+    [...userSkills, ...technologies].map((s) => String(s || '').trim().toLowerCase()).filter(Boolean)
+  );
+
+  const candidateSkills = new Map();
+
+  function addCandidate(name, isRequired, reason, evidence) {
+    if (!candidateSkills.has(name) || (isRequired && !candidateSkills.get(name).required)) {
+      candidateSkills.set(name, {
+        name,
+        required: isRequired,
+        reason,
+        evidence: evidence || 'Referenced in issue requirements',
+        resources: TRUSTED_LEARNING_RESOURCES[name] || null,
+      });
+    }
+  }
+
+  // Detect from referenced files (strongest requirement signal)
+  for (const file of refFiles) {
+    const ext = file.split('.').pop()?.toLowerCase();
+    if (ext === 'ts' || ext === 'tsx') {
+      addCandidate('TypeScript', true, `Code changes involve ${file}, requiring TypeScript types and compiler verification.`, `Referenced file: ${file}`);
+    } else if (ext === 'js' || ext === 'jsx' || ext === 'mjs') {
+      addCandidate('JavaScript', true, `Code changes involve ${file}, modifying JavaScript module logic.`, `Referenced file: ${file}`);
+    } else if (ext === 'py') {
+      addCandidate('Python', true, `Code changes involve ${file}, requiring Python module development.`, `Referenced file: ${file}`);
+    } else if (ext === 'go') {
+      addCandidate('Go', true, `Code changes involve ${file}, requiring Go package compilation.`, `Referenced file: ${file}`);
+    } else if (ext === 'rs') {
+      addCandidate('Rust', true, `Code changes involve ${file}, requiring Rust language constructs and cargo checks.`, `Referenced file: ${file}`);
+    } else if (ext === 'html') {
+      addCandidate('HTML', true, `Code changes involve ${file}, modifying HTML markup or DOM structure.`, `Referenced file: ${file}`);
+    } else if (ext === 'css' || ext === 'scss' || ext === 'sass') {
+      addCandidate('CSS', true, `Styling changes involve ${file}, requiring CSS rules and layout adjustments.`, `Referenced file: ${file}`);
+    } else if (ext === 'md') {
+      addCandidate('Markdown', true, `Documentation update directly modifies ${file}.`, `Referenced file: ${file}`);
+    } else if (file.toLowerCase().includes('docker')) {
+      addCandidate('Docker', true, `Container configuration file ${file} needs modification or testing.`, `Referenced file: ${file}`);
+    }
+  }
+
+  // Detect from labels
+  labels.forEach((label) => {
+    const l = label.toLowerCase();
+    if (/\btypescript\b|\bts\b/.test(l)) {
+      addCandidate('TypeScript', true, 'Repository label flags this issue as a TypeScript task.', `Label: ${label}`);
+    } else if (/\bjavascript\b|\bjs\b/.test(l)) {
+      addCandidate('JavaScript', true, 'Repository label flags this issue as a JavaScript task.', `Label: ${label}`);
+    } else if (/\bpython\b|\bpy\b/.test(l)) {
+      addCandidate('Python', true, 'Repository label indicates a Python task.', `Label: ${label}`);
+    } else if (/\breact\b/.test(l)) {
+      addCandidate('React', true, 'Repository label indicates React component work.', `Label: ${label}`);
+    } else if (/\bvue\b/.test(l)) {
+      addCandidate('Vue', true, 'Repository label indicates Vue component work.', `Label: ${label}`);
+    } else if (/\bdocumentation\b|\bdocs\b/.test(l)) {
+      addCandidate('Markdown', true, 'Documentation label indicates writing or fixing Markdown content.', `Label: ${label}`);
+    } else if (/\bhtml\b/.test(l)) {
+      addCandidate('HTML', true, 'Repository label flags HTML work.', `Label: ${label}`);
+    } else if (/\bcss\b|\bstyle\b|\bstyling\b/.test(l)) {
+      addCandidate('CSS', true, 'Repository label indicates CSS styling work.', `Label: ${label}`);
+    } else if (/\bdocker\b/.test(l)) {
+      addCandidate('Docker', true, 'Repository label specifies Docker environment configuration.', `Label: ${label}`);
+    }
+  });
+
+  // Detect from title & body
+  if (/\btypescript\b/.test(text) && !candidateSkills.has('TypeScript')) {
+    addCandidate('TypeScript', true, 'Issue mentions TypeScript types or interfaces in the task description.', 'Mentioned in text');
+  }
+  if (/\bjavascript\b/.test(text) && !candidateSkills.has('JavaScript')) {
+    addCandidate('JavaScript', true, 'Issue description mentions JavaScript implementation.', 'Mentioned in text');
+  }
+  if (/\breact\b|\bjsx\b/.test(text) && !candidateSkills.has('React')) {
+    addCandidate('React', true, 'Issue task touches React components, hooks, or rendering.', 'Mentioned in text');
+  }
+  if (/\bpython\b/.test(text) && !candidateSkills.has('Python')) {
+    addCandidate('Python', true, 'Issue requires Python code or scripting.', 'Mentioned in text');
+  }
+  if (/\bnode(?:\.js)?\b|\bnpm\b|\byarn\b|\bpnpm\b/.test(text) && !candidateSkills.has('Node.js')) {
+    addCandidate('Node.js', false, 'Issue mentions Node.js environment or npm/yarn dependencies.', 'Mentioned in text');
+  }
+  if (/\bjest\b|\btest assertions?\b/.test(text)) {
+    addCandidate('Jest', false, 'Test verification in this project uses Jest test runner.', 'Mentioned in test instructions');
+  } else if (/\bpytest\b/.test(text)) {
+    addCandidate('Pytest', false, 'Test verification in this project uses Pytest.', 'Mentioned in test instructions');
+  }
+  if (/\bdocker\b|\bcontainer\b/.test(text) && !candidateSkills.has('Docker')) {
+    addCandidate('Docker', false, 'Container setup is referenced for reproducing or running the service.', 'Mentioned in text');
+  }
+  if (/\bgraphql\b/.test(text) && !candidateSkills.has('GraphQL')) {
+    addCandidate('GraphQL', true, 'Task involves GraphQL schema or query mutations.', 'Mentioned in text');
+  }
+  if (/\bsql\b|\bdatabase\b|\bquery\b/.test(text) && !candidateSkills.has('SQL')) {
+    addCandidate('SQL', false, 'Database queries or schema tables are referenced.', 'Mentioned in text');
+  }
+  if (/\bgithub actions\b|\bworkflow\b|\bci\/cd\b/.test(text) && !candidateSkills.has('GitHub Actions / CI')) {
+    addCandidate('GitHub Actions / CI', false, 'Issue touches automation or continuous integration workflows.', 'Mentioned in text');
+  }
+
+  // Also verify user's entered skills against issue text
+  userSkills.forEach((uSkill) => {
+    const raw = String(uSkill || '').trim();
+    if (raw && matchSkillInText(text, raw)) {
+      const canonical = Object.keys(TRUSTED_LEARNING_RESOURCES).find((k) => k.toLowerCase() === raw.toLowerCase()) || raw;
+      if (!candidateSkills.has(canonical)) {
+        addCandidate(canonical, true, `Matches the issue focus on ${canonical}.`, 'Matched in issue content');
+      }
+    }
+  });
+
+  // Always suggest Git / PR Workflow as a helpful skill for open source contribution
+  if (!normalizedUserSkills.has('git') && !normalizedUserSkills.has('git / pr workflow')) {
+    addCandidate('Git / PR Workflow', false, 'Forking, branching, and submitting clean Pull Requests with proper commit messages.', 'Essential open-source contribution workflow');
+  }
+
+  if (candidateSkills.size === 0) {
+    if (labelStr.includes('documentation') || title.toLowerCase().includes('readme') || title.toLowerCase().includes('doc')) {
+      addCandidate('Markdown', true, 'Documentation issue requiring Markdown editing.', 'Issue context');
+    } else {
+      addCandidate('Git / PR Workflow', false, 'Creating branch and opening Pull Request following repository guidelines.', 'General contribution process');
+    }
+  }
+
+  // Partition into the 3 categories
+  const matchingSkills = [];
+  const unconfirmedSkills = [];
+  const helpfulSkills = [];
+
+  candidateSkills.forEach((item) => {
+    const normName = item.name.toLowerCase();
+    const userHasSkill = Array.from(normalizedUserSkills).some((us) =>
+      us === normName || normName.includes(us) || us.includes(normName)
+    );
+
+    if (userHasSkill) {
+      matchingSkills.push({
+        ...item,
+        status: 'matched',
+        category: 'matching',
+        reason: item.reason || `You have entered ${item.name}, which is needed for this task.`,
+      });
+    } else if (item.required) {
+      unconfirmedSkills.push({
+        ...item,
+        status: 'unconfirmed',
+        category: 'unconfirmed',
+        reason: item.reason || `${item.name} is required to complete this issue based on referenced files or labels.`,
+      });
+    } else {
+      helpfulSkills.push({
+        ...item,
+        status: 'helpful',
+        category: 'helpful',
+        reason: item.reason || `${item.name} will help you test, document, or verify your contribution.`,
+      });
+    }
+  });
+
+  // Handle issues with insufficient descriptions or unclear requirements (Requirement 12)
+  const bodyLength = body.trim().length;
+  const hasAcceptanceCriteria = /acceptance criteria|tasks|to-do|\bchecklist\b/i.test(body);
+  const unclearDescription = bodyLength < 60 && refFiles.length === 0 && !hasAcceptanceCriteria;
+  const unclearWarning = unclearDescription
+    ? 'This issue has a brief description without explicit file references or acceptance checklist. Review repository discussions or ask the maintainer for clarification before writing code.'
+    : null;
+
+  let readiness = 'ready';
+  let readinessLabel = 'Ready to Start';
+  let readinessSummary = 'You have entered the primary skills required for this issue.';
+
+  if (unconfirmedSkills.length === 1) {
+    readiness = 'moderate';
+    readinessLabel = '1 Unconfirmed Skill Gap';
+    readinessSummary = `You match most skills, but ${unconfirmedSkills[0].name} is unconfirmed in your entered profile. Review the guide below if needed.`;
+  } else if (unconfirmedSkills.length > 1) {
+    readiness = 'needs-prep';
+    readinessLabel = `${unconfirmedSkills.length} Unconfirmed Skill Gaps`;
+    readinessSummary = `The issue requires ${unconfirmedSkills.map((s) => s.name).join(', ')}. Review the official learning resources below before contributing.`;
+  } else if (matchingSkills.length === 0) {
+    readiness = 'unconfirmed';
+    readinessLabel = 'Unconfirmed Requirements';
+    readinessSummary = 'No exact match with your search skills was detected. Check the helpful guides below to see if you want to take this on.';
+  }
+
+  return {
+    readiness,
+    readinessLabel,
+    readinessSummary,
+    matchingSkills,
+    unconfirmedSkills,
+    helpfulSkills,
+    totalRequired: matchingSkills.length + unconfirmedSkills.length,
+    unclearDescription,
+    unclearWarning,
+  };
+}
+
 function localScore(issue, skills = [], technologies = []) {
   const matched = skills.filter((skill) =>
     matchSkillInText(issue.title, skill) ||
@@ -591,6 +898,7 @@ function localScore(issue, skills = [], technologies = []) {
     firstStep,
     evidence,
     difficulty: estimateDifficulty(issue),
+    skillGap: analyzeSkillGap(issue, skills, technologies),
   };
 }
 
@@ -661,6 +969,7 @@ async function rankWithOllama(issues, skills) {
         firstStep: String(item.firstStep || 'Read the issue and repository contribution guide.'),
         evidence,
         difficulty,
+        skillGap: analyzeSkillGap(original, skills),
       };
     });
   if (!ranked.length) throw new Error('The local model did not match any issue IDs.');
