@@ -36,6 +36,7 @@ function renderIssues(issues) {
       <p class="issue-reason">${escapeHtml(issue.reason)}</p>
       <div class="tags">${tags}</div>
       <div class="issue-bottom"><span class="first-step"><b>First step</b> · ${escapeHtml(issue.firstStep)}</span><a class="open-link" href="${escapeHtml(issue.url)}" target="_blank" rel="noopener noreferrer">View issue ↗</a></div>
+           <p  class="issue-freshness">Open and unassigned when GitHub returned this result. Recheck the issue before you start.</p>
     </article>`;
   }).join('');
 }
