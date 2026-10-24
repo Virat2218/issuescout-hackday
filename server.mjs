@@ -81,6 +81,87 @@ function detectReferencedFiles(body) {
   return matches;
 }
 
+/**
+ * Estimate difficulty level of a GitHub issue using heuristics.
+ * Returns { level: 'beginner'|'intermediate'|'advanced'|'unknown', explanation: string, confidence: 'label'|'heuristic'|'low' }
+ * Does NOT call the AI model — runs cheaply on every issue synchronously.
+ */
+function estimateDifficulty(issue) {
+  const labelStr = (issue.labels || []).join(' ').toLowerCase();
+  const titleStr = (issue.title || '').toLowerCase();
+  const bodyStr  = (issue.body  || '').toLowerCase();
+  const combined = `${titleStr} ${bodyStr} ${labelStr}`;
+
+  // ── 1. Explicit label signals (highest confidence) ──────────────────
+  const BEGINNER_LABELS = /\b(good[- ]first[- ]issue|beginner|first[- ]timer|easy|starter|hacktoberfest|introductory|newbie)\b/;
+  const INTERMEDIATE_LABELS = /\b(difficulty[:-]medium|skill[:-]intermediate|moderate|help[- ]wanted)\b/;
+  const ADVANCED_LABELS = /\b(difficulty[:-]hard|difficulty[:-]advanced|complexity[:-]high|senior|expert|complex|performance|security|architecture)\b/;
+
+  if (ADVANCED_LABELS.test(labelStr)) {
+    return { level: 'advanced', explanation: 'Issue labels indicate advanced complexity.', confidence: 'label' };
+  }
+  if (INTERMEDIATE_LABELS.test(labelStr)) {
+    return { level: 'intermediate', explanation: 'Issue labels indicate intermediate difficulty.', confidence: 'label' };
+  }
+  if (BEGINNER_LABELS.test(labelStr)) {
+    // Even with a beginner label, scope signals can upgrade it
+    const upgradeSignals = [
+      /refactor|architecture|redesign|migration|security|performance|optimize|scale/i.test(combined),
+      /\b(database|auth|oauth|jwt|redis|kubernetes|docker|ci\/cd|pipeline)\b/i.test(combined),
+      (combined.match(/\bfile\b/gi) || []).length > 4, // many file references
+    ].filter(Boolean).length;
+    if (upgradeSignals >= 2) {
+      return { level: 'intermediate', explanation: 'Labelled as beginner-friendly but scope hints at moderate complexity (refactor/architecture/infrastructure).', confidence: 'heuristic' };
+    }
+    return { level: 'beginner', explanation: 'Issue is explicitly labelled for first-time contributors.', confidence: 'label' };
+  }
+
+  // ── 2. Advanced heuristic signals ───────────────────────────────────
+  const advancedSignals = [
+    /\b(refactor|redesign|rewrite|overhaul)\b/i.test(titleStr),
+    /\b(security|auth|encryption|vulnerability|cve)\b/i.test(combined),
+    /\b(performance|benchm|optimize|profile|memory leak|race condition)\b/i.test(combined),
+    /\b(breaking change|api design|schema|migration|upgrade)\b/i.test(combined),
+    /\b(concurrency|thread|async queue|deadlock|websocket)\b/i.test(combined),
+    (issue.comments || 0) > 15,
+    (bodyStr.match(/\b(file|class|module|function|component|hook)\b/gi) || []).length > 8,
+  ].filter(Boolean).length;
+
+  if (advancedSignals >= 3) {
+    return { level: 'advanced', explanation: 'Multiple complexity signals detected: broad scope, security/performance concerns, or heavy discussion.', confidence: 'heuristic' };
+  }
+
+  // ── 3. Intermediate heuristic signals ───────────────────────────────
+  const intermediateSignals = [
+    /\b(add|implement|create|build|integrate)\b/i.test(titleStr),
+    /\b(unit test|integration test|e2e|coverage|mock)\b/i.test(combined),
+    /\b(api|endpoint|route|middleware|hook|plugin)\b/i.test(combined),
+    /\b(configuration|environment|settings|feature flag)\b/i.test(combined),
+    advancedSignals >= 1,
+    (bodyStr.length > 600),
+  ].filter(Boolean).length;
+
+  if (intermediateSignals >= 3) {
+    return { level: 'intermediate', explanation: 'Issue involves building or integrating functionality — more than a small fix but manageable.', confidence: 'heuristic' };
+  }
+
+  // ── 4. Beginner heuristic signals ───────────────────────────────────
+  const beginnerSignals = [
+    /\b(typo|spelling|grammar|comment|rename|missing|broken link|lint|format)\b/i.test(combined),
+    /\b(fix|update|correct|remove|add \w+ to)\b/i.test(titleStr),
+    /\b(documentation|readme|contributing|changelog|doc[s]?)\b/i.test(combined),
+    (bodyStr.length < 250 && titleStr.length < 80),
+    detectReferencedFiles(issue.body).length === 1,
+  ].filter(Boolean).length;
+
+  if (beginnerSignals >= 2) {
+    return { level: 'beginner', explanation: 'Small, well-scoped change (typo, docs, minor fix) — good for first contributions.', confidence: 'heuristic' };
+  }
+
+  // ── 5. Not enough signal ─────────────────────────────────────────────
+  return { level: 'unknown', explanation: 'Not enough evidence in labels or description to estimate difficulty reliably.', confidence: 'low' };
+}
+
 const memoryQueryCache = new Map();
 const knownIssuesPool = new Map();
 
@@ -358,6 +439,7 @@ function localScore(issue, skills = [], technologies = []) {
     reason,
     firstStep,
     evidence,
+    difficulty: estimateDifficulty(issue),
   };
 }
 
@@ -405,6 +487,7 @@ async function rankWithOllama(issues, skills) {
         reason: String(item.reason || 'The model found a possible skill match.'),
         firstStep: String(item.firstStep || 'Read the issue and repository contribution guide.'),
         evidence,
+        difficulty: estimateDifficulty(original),
       };
     });
   if (!ranked.length) throw new Error('The local model did not match any issue IDs.');

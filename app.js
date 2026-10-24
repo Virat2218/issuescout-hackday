@@ -9,9 +9,12 @@ const clearPicksButton = document.querySelector('#clear-picks');
 const exportPlanButton = document.querySelector('#export-plan');
 const modelStatus = document.querySelector('#model-status');
 const liveDot = document.querySelector('.live-dot');
+const difficultyFilterBar = document.querySelector('#difficulty-filter');
+const diffCountLabel = document.querySelector('#diff-count');
 const PICK_STORAGE_KEY = 'issuescout:chosen-issues:v1';
 let chosenIssues = loadChosenIssues();
 let currentIssues = [];
+let activeDifficultyFilter = 'all'; // 'all' | 'beginner' | 'intermediate' | 'advanced'
 
 function updatePickButtons() {
   const pickCount = Object.keys(chosenIssues).length;
@@ -88,6 +91,59 @@ function showNotice(message = '', kind = '') {
   notice.hidden = !message;
 }
 
+/**
+ * Render a difficulty badge for an issue card.
+ * @param {object} difficulty  { level, explanation, confidence }
+ */
+function renderDifficultyBadge(difficulty) {
+  if (!difficulty) return '';
+  const { level = 'unknown', explanation = '', confidence = 'low' } = difficulty;
+  const confidenceNote = confidence === 'label'
+    ? 'Confirmed by issue labels.'
+    : confidence === 'heuristic'
+      ? 'Estimated — verify before relying on this.'
+      : 'Insufficient evidence — estimate may be inaccurate.';
+  const label = level.charAt(0).toUpperCase() + level.slice(1);
+  return `<span class="diff-badge diff-badge--${level}" title="${escapeHtml(explanation + ' ' + confidenceNote)}" aria-label="Difficulty: ${label}">${label}</span>`;
+}
+
+/**
+ * Apply the active difficulty filter to the stored issue list and re-render.
+ * Called when the filter changes without a new search.
+ */
+function applyDifficultyFilter() {
+  const filtered = activeDifficultyFilter === 'all'
+    ? currentIssues
+    : currentIssues.filter((issue) => (issue.difficulty?.level || 'unknown') === activeDifficultyFilter);
+
+  // Update pill active states
+  document.querySelectorAll('.diff-pill').forEach((pill) => {
+    pill.classList.toggle('active', pill.dataset.level === activeDifficultyFilter);
+  });
+
+  // Update count label
+  if (diffCountLabel) {
+    diffCountLabel.textContent = activeDifficultyFilter === 'all'
+      ? ''
+      : `${filtered.length} of ${currentIssues.length} shown`;
+  }
+
+  if (!filtered.length && currentIssues.length > 0) {
+    const levelLabel = activeDifficultyFilter.charAt(0).toUpperCase() + activeDifficultyFilter.slice(1);
+    results.innerHTML = `<div class="empty-state">
+      <div class="empty-icon">⌕</div>
+      <strong>No ${levelLabel} issues in your current shortlist.</strong>
+      <span>Try a different level or search again to get fresh results.</span>
+      <button class="diff-reset-btn" type="button" onclick="document.querySelector('[data-level=all]').click()">Show all levels</button>
+    </div>`;
+    count.textContent = '0 SHOWN';
+    return;
+  }
+
+  count.textContent = filtered.length + ' SHOWN';
+  renderIssueCards(filtered);
+}
+
 function formatIssueFreshness(updatedAt) {
   const timestamp = Date.parse(updatedAt || '');
   if (!Number.isFinite(timestamp)) return { label: 'Update time unavailable', stale: false };
@@ -109,14 +165,31 @@ function formatEvidenceQuote(quote, skill) {
 
 function renderIssues(issues) {
   currentIssues = issues;
-  issues = issues.map((issue, index) => ({ ...issue, pickMatchScore: getPickMatchScore(issue), originalIndex: index }))
+  // Show or hide difficulty filter bar
+  if (difficultyFilterBar) difficultyFilterBar.hidden = issues.length === 0;
+  // Reset filter to 'all' on new search
+  activeDifficultyFilter = 'all';
+  document.querySelectorAll('.diff-pill').forEach((p) => p.classList.toggle('active', p.dataset.level === 'all'));
+  if (diffCountLabel) diffCountLabel.textContent = '';
+
+  const sorted = issues
+    .map((issue, index) => ({ ...issue, pickMatchScore: getPickMatchScore(issue), originalIndex: index }))
     .sort((a, b) => b.pickMatchScore - a.pickMatchScore || a.originalIndex - b.originalIndex);
-  if (!issues.length) {
+
+  currentIssues = sorted;
+
+  if (!sorted.length) {
     results.innerHTML = '<div class="empty-state"><div class="empty-icon">⌕</div><strong>No matching starter issues came back.</strong><span>Try broader skills or remove a technology filter.</span></div>';
     count.textContent = '0 FOUND';
     return;
   }
-  count.textContent = issues.length + ' FOUND';
+  count.textContent = sorted.length + ' FOUND';
+  renderIssueCards(sorted);
+  updatePickButtons();
+}
+
+
+function renderIssueCards(issues) {
   results.innerHTML = issues.map((issue) => {
     const tags = [
       ...(issue.matchedSkills || []).map((skill) => '<span class="tag match-tag">' + escapeHtml(skill) + '</span>'),
@@ -129,8 +202,9 @@ function renderIssues(issues) {
     const picked = Boolean(chosenIssues[issue.id]);
     const pickButtonContent = picked
       ? '<svg class="icon-svg" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg> <span>Added to picks</span>'
-      : '<svg class="icon-svg" viewBox="0 0 24 24"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg> <span>I’d work on this</span>';
+      : '<svg class="icon-svg" viewBox="0 0 24 24"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg> <span>I\u2019d work on this</span>';
     const similarBadge = issue.pickMatchScore > 0 ? '<span class="pick-similar">Similar to your picks</span>' : '';
+    const difficultyBadge = renderDifficultyBadge(issue.difficulty);
     const freshnessClass = freshness.stale ? 'issue-freshness stale' : 'issue-freshness';
     const freshnessNote = freshness.stale
       ? 'May be stale. Recheck on GitHub before starting.'
@@ -139,13 +213,21 @@ function renderIssues(issues) {
     const repoUrl = 'https://github.com/' + escapeHtml(issue.repository);
     const contributingUrl = repoUrl + '/blob/HEAD/CONTRIBUTING.md';
 
+    const diffExplanation = issue.difficulty
+      ? '<p class="diff-explanation"><svg class="icon-svg" style="width:10px;height:10px" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg> '
+        + escapeHtml(issue.difficulty.explanation)
+        + (issue.difficulty.confidence !== 'label' ? ' <em>(estimated)</em>' : '')
+        + '</p>'
+      : '';
+
     return [
       '<article class="issue-card">',
-      '<div class="issue-top"><span class="repo">' + escapeHtml(issue.repository) + '</span><span class="score">' + score + '</span>' + similarBadge + '</div>',
+      '<div class="issue-top"><span class="repo">' + escapeHtml(issue.repository) + '</span><div class="issue-top-badges"><span class="score">' + score + '</span>' + difficultyBadge + similarBadge + '</div></div>',
       '<h3 class="issue-title"><a href="' + escapeHtml(issue.url) + '" target="_blank" rel="noopener noreferrer">' + escapeHtml(issue.title) + '</a></h3>',
       '<p class="issue-reason">' + escapeHtml(issue.reason) + '</p>',
-      '<div class="issue-evidence"><strong>Evidence from issue</strong>' + (evidence.length ? '<ul>' + evidence.map((item) => '<li><span class="evidence-source">' + escapeHtml(item.source) + '</span>' + (item.skill ? ' <span class="evidence-skill">[' + escapeHtml(item.skill) + ']</span>' : '') + ': “' + formatEvidenceQuote(item.quote, item.skill) + '”</li>').join('') + '</ul>' : '<p class="no-evidence">No exact skill phrase found in the issue text. Review it before relying on this match.</p>') + '</div>',
+      '<div class="issue-evidence"><strong>Evidence from issue</strong>' + (evidence.length ? '<ul>' + evidence.map((item) => '<li><span class="evidence-source">' + escapeHtml(item.source) + '</span>' + (item.skill ? ' <span class="evidence-skill">[' + escapeHtml(item.skill) + ']</span>' : '') + ': "' + formatEvidenceQuote(item.quote, item.skill) + '"</li>').join('') + '</ul>' : '<p class="no-evidence">No exact skill phrase found in the issue text. Review it before relying on this match.</p>') + '</div>',
       '<div class="tags">' + tags + '</div>',
+      diffExplanation,
       '<div class="issue-bottom"><span class="first-step"><b>First step</b> · ' + escapeHtml(issue.firstStep) + '</span><div class="issue-actions"><button class="pick-button' + (picked ? ' picked' : '') + '" type="button" data-issue-id="' + issueId + '" aria-pressed="' + picked + '">' + pickButtonContent + '</button><a class="guide-link" href="' + contributingUrl + '" target="_blank" rel="noopener noreferrer" title="View repository contribution guidelines"><svg class="icon-svg" viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg> <span>Guide</span></a><a class="open-link" href="' + escapeHtml(issue.url) + '" target="_blank" rel="noopener noreferrer"><span>View issue</span> <svg class="icon-svg" viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg></a></div></div>',
       '<p class="' + freshnessClass + '"><span>' + escapeHtml(freshness.label) + '</span> · ' + freshnessNote + '</p>',
       '</article>',
@@ -153,6 +235,7 @@ function renderIssues(issues) {
   }).join('');
   updatePickButtons();
 }
+
 
 function generateContributionPlanMarkdown() {
   const picks = Object.values(chosenIssues);
@@ -315,6 +398,14 @@ document.querySelectorAll('.preset-chips .chip').forEach((chip) => {
     } else {
       form.dispatchEvent(new Event('submit', { cancelable: true }));
     }
+  });
+});
+
+// Difficulty filter pill handlers — client-side only, no API calls
+document.querySelectorAll('.diff-pill').forEach((pill) => {
+  pill.addEventListener('click', () => {
+    activeDifficultyFilter = pill.dataset.level || 'all';
+    applyDifficultyFilter();
   });
 });
 

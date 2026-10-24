@@ -935,6 +935,184 @@ footer {
   .results-meta   { flex-wrap: wrap; }
 }
 
+/* ── Difficulty Filter Bar ──────────────────────────── */
+.difficulty-filter {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 14px 0 8px;
+  border-top: 1px solid rgba(184, 255, 87, 0.08);
+  margin-top: 6px;
+}
+.filter-label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+.difficulty-pills {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.diff-pill {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,0.1);
+  background: rgba(255,255,255,0.04);
+  color: var(--color-text-muted);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.diff-pill .icon-svg {
+  width: 12px;
+  height: 12px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.diff-pill:hover {
+  background: rgba(255,255,255,0.08);
+  border-color: rgba(255,255,255,0.2);
+  color: var(--color-text);
+}
+.diff-pill.active {
+  background: var(--color-accent);
+  color: #0a0a0f;
+  border-color: var(--color-accent);
+  font-weight: 600;
+}
+.diff-pill.active .icon-svg {
+  stroke: #0a0a0f;
+}
+/* Colored hover hints per level */
+.diff-pill.beginner:not(.active):hover {
+  border-color: #4ade80;
+  color: #4ade80;
+}
+.diff-pill.intermediate:not(.active):hover {
+  border-color: #facc15;
+  color: #facc15;
+}
+.diff-pill.advanced:not(.active):hover {
+  border-color: #f87171;
+  color: #f87171;
+}
+.diff-count {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--color-text-muted);
+  margin-left: auto;
+}
+
+/* ── Difficulty Badges on Issue Cards ───────────────── */
+.issue-top-badges {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.diff-badge {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  padding: 3px 10px;
+  border-radius: 999px;
+  white-space: nowrap;
+  cursor: help;
+  transition: transform 0.15s ease;
+}
+.diff-badge:hover {
+  transform: scale(1.05);
+}
+.diff-badge--beginner {
+  background: rgba(74, 222, 128, 0.15);
+  color: #4ade80;
+  border: 1px solid rgba(74, 222, 128, 0.3);
+}
+.diff-badge--intermediate {
+  background: rgba(250, 204, 21, 0.12);
+  color: #facc15;
+  border: 1px solid rgba(250, 204, 21, 0.25);
+}
+.diff-badge--advanced {
+  background: rgba(248, 113, 113, 0.12);
+  color: #f87171;
+  border: 1px solid rgba(248, 113, 113, 0.25);
+}
+.diff-badge--unknown {
+  background: rgba(255,255,255,0.06);
+  color: var(--color-text-muted);
+  border: 1px solid rgba(255,255,255,0.1);
+}
+
+/* ── Difficulty Explanation Line ────────────────────── */
+.diff-explanation {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--color-text-muted);
+  margin: 4px 0 6px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  line-height: 1.45;
+}
+.diff-explanation .icon-svg {
+  stroke: var(--color-text-muted);
+  fill: none;
+  stroke-width: 2;
+  flex-shrink: 0;
+}
+.diff-explanation em {
+  font-style: italic;
+  opacity: 0.7;
+}
+
+/* ── Difficulty Filter Empty State ──────────────────── */
+.diff-reset-btn {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  padding: 8px 20px;
+  border-radius: 999px;
+  border: 1px dashed var(--color-accent);
+  background: transparent;
+  color: var(--color-accent);
+  cursor: pointer;
+  margin-top: 12px;
+  transition: all 0.2s ease;
+}
+.diff-reset-btn:hover {
+  background: rgba(184, 255, 87, 0.1);
+  border-style: solid;
+}
+
+/* ── Responsive: Difficulty Filter ──────────────────── */
+@media (max-width: 600px) {
+  .difficulty-filter {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+  .diff-count {
+    margin-left: 0;
+  }
+  .diff-pill {
+    font-size: 10px;
+    padding: 4px 10px;
+  }
+}
+
 /* ── Accessibility: Reduced Motion ──────────────────── */
 @media (prefers-reduced-motion: reduce) {
   *, ::before, ::after {

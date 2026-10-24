@@ -95,6 +95,26 @@
           </div>
         </div>
         <p class="pick-privacy">Your picks stay in this browser and help move similar issues higher next time.</p>
+        <!-- Difficulty filter bar -->
+        <div class="difficulty-filter" id="difficulty-filter" hidden>
+          <span class="filter-label">Filter by level:</span>
+          <div class="difficulty-pills" role="group" aria-label="Difficulty level filter">
+            <button class="diff-pill active" data-level="all" type="button">All Levels</button>
+            <button class="diff-pill beginner" data-level="beginner" type="button">
+              <svg class="icon-svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.22 4.22l2.12 2.12M17.66 17.66l2.12 2.12M2 12h3M19 12h3M4.22 19.78l2.12-2.12M17.66 6.34l2.12-2.12"/></svg>
+              Beginner
+            </button>
+            <button class="diff-pill intermediate" data-level="intermediate" type="button">
+              <svg class="icon-svg" viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+              Intermediate
+            </button>
+            <button class="diff-pill advanced" data-level="advanced" type="button">
+              <svg class="icon-svg" viewBox="0 0 24 24"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+              Advanced
+            </button>
+          </div>
+          <span class="diff-count" id="diff-count"></span>
+        </div>
         <div id="notice" class="notice" hidden></div>
         <div id="results" class="results-grid">
           <div class="empty-state">
