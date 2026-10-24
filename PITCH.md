@@ -14,6 +14,7 @@ IssueScout starts with the skills a contributor already has and returns a short 
 2. Search GitHub and show the local model status.
 3. Open one result and point out its labels, skill match, reason, and first step.
 4. Follow the link to GitHub and confirm that the issue remains open and unassigned.
+5. Mark one issue as “I’d work on this,” search again, and show similar suggestions moving higher.
 
 ## 4:30–5:45 — How it works
 
@@ -25,7 +26,7 @@ The model can make a poor match or miss context. GitHub supplies the issue state
 
 ## 6:30–7:15 — Next improvements
 
-Learn from which suggested issues contributors actually choose and improve match explanations over time. Keep the local model and show evidence for every recommendation.
+Let contributors mark issues they would work on. Save only each GitHub issue ID, labels, and matched skills in that browser, then move similar results higher on later searches. The pick history never goes to the server, and the model fit score stays unchanged. Next, improve match explanations while keeping evidence for every recommendation.
 
 ## 7:15–8:00 — Close
 

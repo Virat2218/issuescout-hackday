@@ -2,3 +2,5 @@
 .issue-freshness{margin:9px 0 0;color:#7a8378;font:9px/1.5 var(--mono)}.issue-freshness.stale{color:#a34e37;font-weight:500}
 
 .technology-focus{display:grid;gap:7px;margin-top:15px}.technology-focus label{margin:0}.technology-focus label span,.filter-hint{font-weight:400;color:#7a8378}.technology-focus input{width:100%;padding:11px 12px;border:1px solid #cdd1c6;background:transparent;border-radius:3px;font:13px var(--sans);color:var(--ink);outline:none}.technology-focus input:focus{border-color:#687d47;box-shadow:0 0 0 3px #c9f06b55}.filter-hint{font:9px/1.5 var(--mono)}
+
+.pick-privacy{margin:0 0 13px;color:#7a8378;font:10px/1.5 var(--mono)}.pick-similar{font:9px var(--mono);padding:4px 6px;background:#e5f0d0;color:#46632d;white-space:nowrap}.issue-actions{display:flex;align-items:center;justify-content:flex-end;gap:10px;flex-wrap:wrap}.pick-button{border:1px solid #a7bd83;background:#f4f8eb;color:#425b2e;border-radius:3px;padding:6px 8px;font:9px var(--mono);cursor:pointer}.pick-button:hover,.pick-button.picked{background:var(--green);border-color:#9ebc55;color:#253420}.pick-button:focus-visible{outline:2px solid #687d47;outline-offset:2px}
