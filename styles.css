@@ -1027,34 +1027,69 @@ footer {
   font-size: 10px;
   font-weight: 600;
   letter-spacing: 0.04em;
-  padding: 3px 10px;
+  padding: 3px 9px;
   border-radius: 999px;
   white-space: nowrap;
   cursor: help;
-  transition: transform 0.15s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  line-height: 1.2;
+  transition: transform 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+  user-select: none;
 }
 .diff-badge:hover {
-  transform: scale(1.05);
+  transform: translateY(-1px);
 }
+.diff-badge-icon {
+  width: 11px;
+  height: 11px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 2.2;
+  flex-shrink: 0;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+/* 1. Beginner: green-toned badge */
 .diff-badge--beginner {
-  background: rgba(74, 222, 128, 0.15);
+  background: rgba(74, 222, 128, 0.12);
   color: #4ade80;
   border: 1px solid rgba(74, 222, 128, 0.3);
 }
+.diff-badge--beginner:hover {
+  background: rgba(74, 222, 128, 0.2);
+  border-color: rgba(74, 222, 128, 0.45);
+}
+/* 2. Intermediate: amber-toned badge */
 .diff-badge--intermediate {
-  background: rgba(250, 204, 21, 0.12);
-  color: #facc15;
-  border: 1px solid rgba(250, 204, 21, 0.25);
+  background: rgba(245, 158, 11, 0.12);
+  color: #fbbf24;
+  border: 1px solid rgba(245, 158, 11, 0.3);
 }
+.diff-badge--intermediate:hover {
+  background: rgba(245, 158, 11, 0.2);
+  border-color: rgba(245, 158, 11, 0.45);
+}
+/* 3. Advanced: red-toned badge */
 .diff-badge--advanced {
-  background: rgba(248, 113, 113, 0.12);
+  background: rgba(239, 68, 68, 0.12);
   color: #f87171;
-  border: 1px solid rgba(248, 113, 113, 0.25);
+  border: 1px solid rgba(239, 68, 68, 0.3);
 }
+.diff-badge--advanced:hover {
+  background: rgba(239, 68, 68, 0.2);
+  border-color: rgba(239, 68, 68, 0.45);
+}
+/* 4. Unknown: neutral gray badge */
 .diff-badge--unknown {
-  background: rgba(255,255,255,0.06);
-  color: var(--color-text-muted);
-  border: 1px solid rgba(255,255,255,0.1);
+  background: rgba(148, 163, 184, 0.1);
+  color: #94a3b8;
+  border: 1px solid rgba(148, 163, 184, 0.25);
+}
+.diff-badge--unknown:hover {
+  background: rgba(148, 163, 184, 0.18);
+  border-color: rgba(148, 163, 184, 0.35);
 }
 
 /* ── Difficulty Card Section ────────────────────────── */

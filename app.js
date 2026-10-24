@@ -92,21 +92,37 @@ function showNotice(message = '', kind = '') {
 }
 
 /**
- * Render a difficulty badge for an issue card.
+ * Distinct SVG icons for each difficulty level so badges are distinguishable
+ * without relying solely on color (accessible for all vision types).
+ */
+const DIFFICULTY_ICONS = {
+  beginner: '<svg class="diff-badge-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.22 4.22l2.12 2.12M17.66 17.66l2.12 2.12M2 12h3M19 12h3M4.22 19.78l2.12-2.12M17.66 6.34l2.12-2.12"/></svg>',
+  intermediate: '<svg class="diff-badge-icon" viewBox="0 0 24 24" aria-hidden="true"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>',
+  advanced: '<svg class="diff-badge-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>',
+  unknown: '<svg class="diff-badge-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>',
+};
+
+/**
+ * Render an accessible difficulty badge for an issue card header.
+ * Supports Beginner, Intermediate, Advanced, and Unknown.
+ * Falls back to Unknown if difficulty data is missing or invalid.
  * @param {object} difficulty  { level, explanation, confidence, signals, uncertainty }
  */
 function renderDifficultyBadge(difficulty) {
-  if (!difficulty) return '';
-  const { level = 'unknown', explanation = '', confidence = 'low' } = difficulty;
-  const confNormalized = (confidence || '').toLowerCase();
-  const confidenceIcon = (confNormalized === 'label' || confNormalized === 'high') ? '✓' : (confNormalized === 'heuristic' || confNormalized === 'medium') ? '≈' : '?';
-  const confidenceNote = (confNormalized === 'label' || confNormalized === 'high')
-    ? 'High confidence (verified with issue labels).'
-    : (confNormalized === 'heuristic' || confNormalized === 'medium')
-      ? 'Medium confidence (heuristic estimate from issue description & scope).'
-      : 'Low confidence (insufficient context — verify on GitHub).';
+  const validLevels = ['beginner', 'intermediate', 'advanced', 'unknown'];
+  const rawLevel = (difficulty && typeof difficulty.level === 'string')
+    ? difficulty.level.toLowerCase().trim()
+    : 'unknown';
+  const level = validLevels.includes(rawLevel) ? rawLevel : 'unknown';
   const label = level.charAt(0).toUpperCase() + level.slice(1);
-  return `<span class="diff-badge diff-badge--${level}" title="${escapeHtml(explanation + ' ' + confidenceNote)}" aria-label="Difficulty: ${label} (${confidenceNote})"><span class="diff-confidence-icon">${confidenceIcon}</span>${label}</span>`;
+  const icon = DIFFICULTY_ICONS[level] || DIFFICULTY_ICONS.unknown;
+
+  const rawExplanation = (difficulty && typeof difficulty.explanation === 'string' && difficulty.explanation.trim())
+    ? difficulty.explanation.trim()
+    : 'Difficulty estimated from issue signals and scope.';
+  const tooltip = `Difficulty: ${label} (Estimated: ${rawExplanation} Always recheck on GitHub before starting.)`;
+
+  return `<span class="diff-badge diff-badge--${level}" role="status" title="${escapeHtml(tooltip)}" aria-label="Difficulty: ${label}. Difficulty is an estimated level.">${icon}<span>${label}</span></span>`;
 }
 
 /**
