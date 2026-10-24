@@ -1,5 +1,6 @@
 const form = document.querySelector('#search-form');
 const input = document.querySelector('#skills');
+const technologyInput = document.querySelector('#technologies');
 const button = document.querySelector('#find-button');
 const results = document.querySelector('#results');
 const notice = document.querySelector('#notice');
@@ -28,7 +29,7 @@ function formatIssueFreshness(updatedAt) {
 
 function renderIssues(issues) {
   if (!issues.length) {
-    results.innerHTML = '<div class="empty-state"><div class="empty-icon">⌕</div><strong>No matching starter issues came back.</strong><span>Try a broader skill list and search again.</span></div>';
+    results.innerHTML = '<div class="empty-state"><div class="empty-icon">⌕</div><strong>No matching starter issues came back.</strong><span>Try broader skills or remove a technology filter.</span></div>';
     count.textContent = '0 FOUND';
     return;
   }
@@ -86,15 +87,15 @@ form.addEventListener('submit', async (event) => {
     const response = await fetch('/api/find', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ skills }),
+      body: JSON.stringify({ skills, technologies: technologyInput.value.trim() }),
     });
     const data = await response.json();
     if (!response.ok) throw new Error(data.error || 'The search did not complete.');
     renderIssues(data.issues || []);
     if (data.rankingMode === 'local-ai') {
-      showNotice('Ranked locally with ' + data.model + '. Issue data came from GitHub.');
+      showNotice('Ranked locally with ' + data.model + '. Issue data came from GitHub.' + (technologyInput.value.trim() ? ' Technology focus: ' + technologyInput.value.trim() + '.' : ''));
     } else if (data.rankingMode === 'keyword-fallback') {
-      showNotice('Showing a basic skill match. To enable AI ranking, start Ollama and load ' + data.model + '. ' + (data.aiMessage || ''));
+      showNotice('Showing a basic skill match. To enable AI ranking, start Ollama and load ' + data.model + '. ' + (data.aiMessage || '') + (technologyInput.value.trim() ? ' Technology focus: ' + technologyInput.value.trim() + '.' : ''));
     } else {
       showNotice('No results were returned. Try again in a moment or broaden your skills.');
     }
