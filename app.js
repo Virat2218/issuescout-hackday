@@ -11,6 +11,8 @@ const modelStatus = document.querySelector('#model-status');
 const liveDot = document.querySelector('.live-dot');
 const difficultyFilterBar = document.querySelector('#difficulty-filter');
 const diffCountLabel = document.querySelector('#diff-count');
+const diffResetButton = document.querySelector('#diff-reset');
+const diffPillsContainer = document.querySelector('.difficulty-pills');
 const PICK_STORAGE_KEY = 'issuescout:chosen-issues:v1';
 let chosenIssues = loadChosenIssues();
 let currentIssues = [];
@@ -201,8 +203,16 @@ function applyDifficultyFilter() {
 
   // Update pill active states
   document.querySelectorAll('.diff-pill').forEach((pill) => {
-    pill.classList.toggle('active', pill.dataset.level === activeDifficultyFilter);
+    const isSelected = pill.dataset.level === activeDifficultyFilter;
+    pill.classList.toggle('active', isSelected);
+    pill.setAttribute('aria-checked', isSelected ? 'true' : 'false');
+    pill.tabIndex = isSelected ? 0 : -1;
   });
+
+  // Toggle optional clear/reset button
+  if (diffResetButton) {
+    diffResetButton.hidden = (activeDifficultyFilter === 'all');
+  }
 
   // Update count label
   if (diffCountLabel) {
@@ -223,7 +233,7 @@ function applyDifficultyFilter() {
     return;
   }
 
-  count.textContent = filtered.length + ' SHOWN';
+  count.textContent = (activeDifficultyFilter === 'all' ? currentIssues.length : filtered.length) + (activeDifficultyFilter === 'all' ? ' FOUND' : ' SHOWN');
   renderIssueCards(filtered);
 }
 
@@ -247,13 +257,8 @@ function formatEvidenceQuote(quote, skill) {
 }
 
 function renderIssues(issues) {
-  currentIssues = issues;
   // Show or hide difficulty filter bar
   if (difficultyFilterBar) difficultyFilterBar.hidden = issues.length === 0;
-  // Reset filter to 'all' on new search
-  activeDifficultyFilter = 'all';
-  document.querySelectorAll('.diff-pill').forEach((p) => p.classList.toggle('active', p.dataset.level === 'all'));
-  if (diffCountLabel) diffCountLabel.textContent = '';
 
   const sorted = issues
     .map((issue, index) => ({ ...issue, pickMatchScore: getPickMatchScore(issue), originalIndex: index }))
@@ -264,10 +269,12 @@ function renderIssues(issues) {
   if (!sorted.length) {
     results.innerHTML = '<div class="empty-state"><div class="empty-icon">⌕</div><strong>No matching starter issues came back.</strong><span>Try broader skills or remove a technology filter.</span></div>';
     count.textContent = '0 FOUND';
+    if (diffCountLabel) diffCountLabel.textContent = '';
     return;
   }
-  count.textContent = sorted.length + ' FOUND';
-  renderIssueCards(sorted);
+
+  // Preserve active difficulty filter on new search results
+  applyDifficultyFilter();
   updatePickButtons();
 }
 
@@ -488,6 +495,46 @@ document.querySelectorAll('.diff-pill').forEach((pill) => {
     applyDifficultyFilter();
   });
 });
+
+// Reset difficulty filter button (resets to All Levels)
+if (diffResetButton) {
+  diffResetButton.addEventListener('click', () => {
+    activeDifficultyFilter = 'all';
+    applyDifficultyFilter();
+    const allPill = document.querySelector('.diff-pill[data-level="all"]');
+    if (allPill) allPill.focus();
+  });
+}
+
+// Arrow key navigation for difficulty radio pills (Keyboard accessibility requirement 6)
+if (diffPillsContainer) {
+  diffPillsContainer.addEventListener('keydown', (event) => {
+    const pills = Array.from(diffPillsContainer.querySelectorAll('.diff-pill'));
+    const currentIndex = pills.findIndex((p) => p.dataset.level === activeDifficultyFilter);
+    let nextIndex = -1;
+
+    if (event.key === 'ArrowRight' || event.key === 'ArrowDown') {
+      event.preventDefault();
+      nextIndex = (currentIndex + 1) % pills.length;
+    } else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') {
+      event.preventDefault();
+      nextIndex = (currentIndex - 1 + pills.length) % pills.length;
+    } else if (event.key === 'Home') {
+      event.preventDefault();
+      nextIndex = 0;
+    } else if (event.key === 'End') {
+      event.preventDefault();
+      nextIndex = pills.length - 1;
+    }
+
+    if (nextIndex >= 0) {
+      const nextPill = pills[nextIndex];
+      activeDifficultyFilter = nextPill.dataset.level || 'all';
+      applyDifficultyFilter();
+      nextPill.focus();
+    }
+  });
+}
 
 checkStatus();
 updatePickButtons();
