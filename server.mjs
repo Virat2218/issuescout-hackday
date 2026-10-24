@@ -62,7 +62,7 @@ function extractEvidence(issue, matchedSkills) {
         const end = Math.min(field.text.length, index + trimmed.length + 60);
         const snippet = field.text.slice(start, end).replace(/[\r\n\t]+/g, ' ').replace(/\s+/g, ' ').trim();
         const quote = (start > 0 ? '…' : '') + snippet + (end < field.text.length ? '…' : '');
-        evidence.push({ source: field.source, skill: trimmed, quote });
+        evidence.push({ source: field.source, skill: trimmed, quote, isSourceBacked: true });
         break;
       }
     }
@@ -1345,6 +1345,161 @@ function detectRelatedIssues(targetIssue, candidatePool = []) {
   return matches.slice(0, 4);
 }
 
+// Cache for AI & heuristic match explanations (30 min TTL)
+const matchExplanationCache = new Map();
+
+/**
+ * Builds a structured, transparent match explanation grounded strictly in verified issue data.
+ * Adheres to:
+ * - Requirement 1: Explains match using skills, title, body, labels, repo
+ * - Requirement 2: Matching skills, supporting evidence, unconfirmed requirements, suitability, limitations
+ * - Requirement 3 & 4: Uses authentic excerpts; never fabricates quotes or details
+ * - Requirement 5: Clearly distinguishes source-backed evidence from AI interpretation
+ * - Requirement 6: Explains fit score is a relative ranking estimate, not a success probability
+ */
+function buildMatchExplanation(issue, userSkills = [], technologies = [], aiData = null) {
+  const normSkills = (userSkills || []).map((s) => String(s || '').trim()).filter(Boolean);
+  const normTech = (technologies || []).map((t) => String(t || '').trim()).filter(Boolean);
+  const cacheKey = `${issue.id || issue.url}__${normSkills.slice().sort().join(',')}__${normTech.slice().sort().join(',')}`;
+
+  if (!aiData && matchExplanationCache.has(cacheKey)) {
+    const cached = matchExplanationCache.get(cacheKey);
+    if (Date.now() - cached.timestamp < 1800000) {
+      return cached.data;
+    }
+  }
+
+  const title = String(issue.title || '');
+  const body = String(issue.body || '');
+  const labels = issue.labels || [];
+  const repo = String(issue.repository || '');
+
+  // 1. Identify matching skills with explicit source attribution
+  const matchingSkills = [];
+  const verifiedMatched = [];
+
+  for (const skill of normSkills) {
+    const sources = [];
+    if (matchSkillInText(title, skill)) sources.push('Title');
+    if (matchSkillInText(body, skill)) sources.push('Description');
+    if (labels.some((l) => matchSkillInText(l, skill))) sources.push('Labels');
+    if (matchSkillInText(repo, skill)) sources.push('Repository');
+
+    if (sources.length > 0) {
+      verifiedMatched.push(skill);
+      matchingSkills.push({
+        name: skill,
+        source: sources.join(', '),
+        primarySource: sources[0],
+        verifiedInSource: true,
+      });
+    } else if (aiData && Array.isArray(aiData.matchedSkills) && aiData.matchedSkills.includes(skill)) {
+      // Inferred by AI but not explicitly verified by regex in source text
+      matchingSkills.push({
+        name: skill,
+        source: 'AI-interpreted context',
+        primarySource: 'AI-inferred',
+        verifiedInSource: false,
+      });
+    }
+  }
+
+  // 2. Real Supporting Evidence Quotes (Authentic verbatim excerpts only, never fabricated)
+  const supportingEvidence = extractEvidence(issue, verifiedMatched);
+
+  // 3. Relevant requirements or skills not yet confirmed
+  const unconfirmedRequirements = [];
+  const skillGap = analyzeSkillGap(issue, normSkills, normTech);
+  if (Array.isArray(skillGap.unconfirmedSkills)) {
+    for (const gap of skillGap.unconfirmedSkills) {
+      unconfirmedRequirements.push({
+        name: gap.name,
+        note: gap.reason || `${gap.name} appears required based on repository files or issue tags.`,
+        isAiInterpreted: false,
+      });
+    }
+  }
+
+  // If AI specified unconfirmed requirements, validate and include them
+  if (aiData && Array.isArray(aiData.unconfirmedRequirements)) {
+    for (const req of aiData.unconfirmedRequirements) {
+      const cleanReq = String(req || '').trim();
+      if (
+        cleanReq &&
+        !unconfirmedRequirements.some((u) => u.name.toLowerCase() === cleanReq.toLowerCase()) &&
+        !normSkills.some((s) => s.toLowerCase() === cleanReq.toLowerCase())
+      ) {
+        unconfirmedRequirements.push({
+          name: cleanReq,
+          note: 'Identified by local AI model from problem context; not yet verified in your entered skills.',
+          isAiInterpreted: true,
+        });
+      }
+    }
+  }
+
+  // 4. Short explanation of why the issue may be suitable
+  let suitabilityReason = '';
+  if (aiData && typeof aiData.suitabilityReason === 'string' && aiData.suitabilityReason.trim().length > 10) {
+    suitabilityReason = aiData.suitabilityReason.trim();
+  } else if (matchingSkills.length > 0) {
+    const verifiedNames = matchingSkills.map((m) => m.name);
+    if (normTech.length > 0 && normTech.some((t) => matchSkillInText(title, t) || matchSkillInText(body, t))) {
+      suitabilityReason = `Directly matches your experience in ${verifiedNames.join(', ')} and aligns with your focus on ${normTech.join('/')}.`;
+    } else {
+      suitabilityReason = `Directly matches your skills in ${verifiedNames.slice(0, 3).join(', ')} through explicit mentions in the issue ${matchingSkills[0].source.toLowerCase()}.`;
+    }
+  } else if (normTech.length > 0 && normTech.some((t) => matchSkillInText(title, t) || matchSkillInText(body, t))) {
+    suitabilityReason = `Aligns with your project technology focus on ${normTech.join(', ')} in an open starter repository.`;
+  } else {
+    suitabilityReason = `This open starter issue in ${repo || 'the repository'} provides an approachable entry point for open-source contributors.`;
+  }
+
+  // 5. Limitations and uncertainty notes (Requirement 2 & 6)
+  const limitations = [];
+  limitations.push('Fit score is a relative ranking estimate based on skill overlap, not a guarantee that your contribution will succeed.');
+  limitations.push('Maintainer responsiveness and PR guidelines should be checked on GitHub before starting work.');
+
+  if (!body || body.trim().length < 150) {
+    limitations.push(`The issue description is brief (${body ? body.trim().length : 0} characters); setup instructions or full acceptance criteria may be omitted.`);
+  }
+
+  if (supportingEvidence.length === 0) {
+    limitations.push('No exact verbatim skill phrases were quoted from the issue body; match was inferred from repository metadata or labels.');
+  }
+
+  if (aiData) {
+    limitations.push(`Suitability analysis was interpreted by local AI model (${ollamaModel}); review the original discussion thread directly on GitHub.`);
+    if (Array.isArray(aiData.limitations)) {
+      for (const lim of aiData.limitations) {
+        const cleanLim = String(lim || '').trim();
+        if (cleanLim && !limitations.includes(cleanLim)) {
+          limitations.push(cleanLim);
+        }
+      }
+    }
+  } else {
+    limitations.push('Evaluated using deterministic keyword matching because the local AI model was not active for this search.');
+  }
+
+  const scoreDisclaimer = 'This fit score is a relative ranking estimate based on skill overlap and issue signals, not a probability that your contribution will succeed.';
+
+  const explanation = {
+    suitabilityReason,
+    matchingSkills,
+    supportingEvidence,
+    unconfirmedRequirements: unconfirmedRequirements.slice(0, 5),
+    limitations: limitations.slice(0, 5),
+    scoreDisclaimer,
+    sourceType: aiData ? 'ai-analyzed' : 'keyword-heuristic',
+    sourceLabel: aiData ? `Local AI Model (${ollamaModel})` : 'Keyword & Issue Signal Analysis',
+    timestamp: new Date().toISOString(),
+  };
+
+  matchExplanationCache.set(cacheKey, { timestamp: Date.now(), data: explanation });
+  return explanation;
+}
+
 function localScore(issue, skills = [], technologies = []) {
   const matched = skills.filter((skill) =>
     matchSkillInText(issue.title, skill) ||
@@ -1412,6 +1567,8 @@ function localScore(issue, skills = [], technologies = []) {
     firstStep = `Open the issue, check the repository's CONTRIBUTING guide, and leave a comment to claim.`;
   }
 
+  const matchExplanation = buildMatchExplanation(issue, skills, technologies, null);
+
   return {
     ...issue,
     score,
@@ -1421,6 +1578,8 @@ function localScore(issue, skills = [], technologies = []) {
     evidence,
     difficulty: estimateDifficulty(issue),
     skillGap: analyzeSkillGap(issue, skills, technologies),
+    matchExplanation,
+    scoreDisclaimer: matchExplanation.scoreDisclaimer,
   };
 }
 
@@ -1436,7 +1595,7 @@ async function rankWithOllama(issues, skills) {
   const candidates = issues.slice(0, 20).map(({ id, title, repository, url, labels, body, updatedAt }) => ({
     id, title, repository, url, labels, body: body.slice(0, 850), updatedAt,
   }));
-  const prompt = `You help a developer choose an open-source starter issue. Rank the supplied issues for the person's skills and evaluate difficulty level (Beginner, Intermediate, Advanced, or Unknown). Use only evidence in the issue data. Do not classify an issue as Beginner solely because it has 'good first issue' if its scope involves architectural changes, security, or many files. Return ONLY a JSON array, with one object for each selected issue: {"id": number, "score": number from 0 to 100, "matchedSkills": [string], "difficulty": "Beginner" | "Intermediate" | "Advanced" | "Unknown", "difficultyReason": "short explanation of difficulty", "reason": "one short evidence-based sentence", "firstStep": "one concrete first action"}. Return at most 8 objects, ordered best fit first. Skills: ${skills.join(', ')}. Issues: ${JSON.stringify(candidates)}`;
+  const prompt = `You help a developer choose an open-source starter issue. Rank the supplied issues for the person's skills and evaluate difficulty level (Beginner, Intermediate, Advanced, or Unknown). Use only evidence in the issue data. Do not classify an issue as Beginner solely because it has 'good first issue' if its scope involves architectural changes, security, or many files. Return ONLY a JSON array, with one object for each selected issue: {"id": number, "score": number from 0 to 100, "matchedSkills": [string], "difficulty": "Beginner" | "Intermediate" | "Advanced" | "Unknown", "difficultyReason": "short explanation of difficulty", "suitabilityReason": "one concise sentence explaining why this issue matches the developer's skills and is suitable", "unconfirmedRequirements": [string], "limitations": [string], "reason": "one short evidence-based sentence", "firstStep": "one concrete first action"}. Return at most 8 objects, ordered best fit first. Skills: ${skills.join(', ')}. Issues: ${JSON.stringify(candidates)}`;
   const response = await fetch(`${ollamaUrl}/api/generate`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -1483,15 +1642,19 @@ async function rankWithOllama(issues, skills) {
         }
       }
 
+      const matchExplanation = buildMatchExplanation(original, verifiedMatched, [], item);
+
       return {
         ...original,
         score: Math.max(0, Math.min(100, Number(item.score) || 0)),
         matchedSkills: verifiedMatched,
-        reason: String(item.reason || 'The model found a possible skill match.'),
+        reason: String(item.reason || matchExplanation.suitabilityReason || 'The model found a possible skill match.'),
         firstStep: String(item.firstStep || 'Read the issue and repository contribution guide.'),
         evidence,
         difficulty,
         skillGap: analyzeSkillGap(original, skills),
+        matchExplanation,
+        scoreDisclaimer: matchExplanation.scoreDisclaimer,
       };
     });
   if (!ranked.length) throw new Error('The local model did not match any issue IDs.');

@@ -1133,6 +1133,213 @@ function renderIssues(issues) {
 }
 
 
+/**
+ * Retrieves the structured match explanation or synthesizes a client-side fallback.
+ * Strictly adheres to non-fabrication: only real text and quotes are preserved.
+ */
+function getIssueMatchExplanation(issue) {
+  if (issue.matchExplanation && typeof issue.matchExplanation === 'object' && Array.isArray(issue.matchExplanation.matchingSkills)) {
+    return issue.matchExplanation;
+  }
+
+  // Synthesize client-side fallback for saved picks or offline items
+  const matched = Array.isArray(issue.matchedSkills) ? issue.matchedSkills : [];
+  const fields = [
+    { source: 'Title', text: String(issue.title || '') },
+    { source: 'Description', text: String(issue.body || '') },
+    { source: 'Labels', text: (issue.labels || []).join(', ') },
+    { source: 'Repository', text: String(issue.repository || '') },
+  ];
+
+  const matchingSkills = matched.map((skill) => {
+    const s = String(skill || '').trim();
+    const sources = fields.filter((f) => matchSkillInText(f.text, s)).map((f) => f.source);
+    return {
+      name: s,
+      source: sources.length ? sources.join(', ') : 'Issue metadata',
+      primarySource: sources[0] || 'Metadata',
+      verifiedInSource: sources.length > 0,
+    };
+  });
+
+  const supportingEvidence = getIssueEvidence(issue);
+  const gap = getIssueSkillGap(issue);
+  const unconfirmedRequirements = (gap.unconfirmedSkills || []).slice(0, 4).map((g) => ({
+    name: g.name,
+    note: g.reason || `${g.name} may be required based on repository signals.`,
+    isAiInterpreted: false,
+  }));
+
+  const limitations = [
+    'Fit score is a relative ranking estimate based on skill overlap, not a guarantee that your contribution will succeed.',
+    'Maintainer responsiveness and PR guidelines should be checked on GitHub before starting work.',
+  ];
+
+  if (!issue.body || issue.body.length < 150) {
+    limitations.push('Issue description is brief; some project requirements or instructions may be omitted.');
+  }
+  if (!supportingEvidence.length) {
+    limitations.push('No exact verbatim skill phrases were quoted from the issue body; match was inferred from tags or repository name.');
+  }
+
+  return {
+    suitabilityReason: issue.reason || 'This open starter issue matches your entered skills and tech profile.',
+    matchingSkills,
+    supportingEvidence,
+    unconfirmedRequirements,
+    limitations,
+    scoreDisclaimer: issue.scoreDisclaimer || 'This fit score is a relative ranking estimate based on skill overlap and issue signals, not a probability that your contribution will succeed.',
+    sourceType: 'keyword-heuristic',
+    sourceLabel: 'Issue Signal Analysis',
+    timestamp: new Date().toISOString(),
+  };
+}
+
+/**
+ * Renders the transparent AI Match Explanation block.
+ * - Collapsible details element
+ * - Clearly distinguishes source-backed evidence (📋 In Description, 📋 In Title) from AI interpretation (🤖 AI Interpreted)
+ * - Highlights verbatim quotes from GitHub issue data
+ * - Transparently communicates unconfirmed requirements and limitations
+ * - Explains fit score is an estimation, not a success guarantee
+ */
+function renderMatchExplanationBlock(issue) {
+  const expl = getIssueMatchExplanation(issue);
+  const isAi = expl.sourceType === 'ai-analyzed';
+  const scoreNum = Number.isFinite(Number(issue.score)) ? Math.round(issue.score) : null;
+  const scoreText = scoreNum !== null ? `${scoreNum}% fit estimate` : 'Fit ranking estimate';
+
+  // 1. Matching Skills HTML with source distinction
+  const matchingSkillsHtml = expl.matchingSkills.length > 0
+    ? expl.matchingSkills.map((m) => {
+        const isVerified = m.verifiedInSource !== false;
+        const chipClass = isVerified ? 'match-skill-verified' : 'match-skill-inferred';
+        const icon = isVerified
+          ? '<svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>'
+          : '<svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>';
+        const originLabel = isVerified ? `📋 In ${escapeHtml(m.source)}` : '🤖 AI-Inferred';
+        return `
+          <div class="match-skill-chip ${chipClass}">
+            <span class="match-skill-name">${icon} ${escapeHtml(m.name)}</span>
+            <span class="match-skill-origin" title="Source location: ${escapeHtml(m.source)}">${originLabel}</span>
+          </div>
+        `;
+      }).join('')
+    : '<span class="match-no-skills">General starter issue; no explicit skill phrase matched in text.</span>';
+
+  // 2. Supporting Evidence Excerpts (Strictly real quotes, formatted with highlights)
+  const evidenceHtml = expl.supportingEvidence && expl.supportingEvidence.length > 0
+    ? `
+      <div class="match-detail-section">
+        <span class="match-section-label">Source-Backed Evidence Excerpts:</span>
+        <ul class="match-evidence-list">
+          ${expl.supportingEvidence.map((item) => `
+            <li class="match-evidence-item">
+              <div class="evidence-item-header">
+                <span class="evidence-source-tag">📋 ${escapeHtml(item.source)}</span>
+                ${item.skill ? `<span class="evidence-skill-tag">[${escapeHtml(item.skill)}]</span>` : ''}
+                <span class="source-verified-tag">✓ Verified Real Excerpt</span>
+              </div>
+              <blockquote class="evidence-quote-box">"${formatEvidenceQuote(item.quote, item.skill)}"</blockquote>
+            </li>
+          `).join('')}
+        </ul>
+      </div>
+    `
+    : `
+      <div class="match-detail-section">
+        <span class="match-section-label">Source-Backed Evidence Excerpts:</span>
+        <p class="no-evidence-note">No verbatim skill phrase was directly extracted from the issue text. Match was established through repository labels, technology tags, or issue metadata.</p>
+      </div>
+    `;
+
+  // 3. Unconfirmed Requirements
+  const unconfirmedHtml = expl.unconfirmedRequirements && expl.unconfirmedRequirements.length > 0
+    ? `
+      <div class="match-detail-section">
+        <span class="match-section-label">Relevant Requirements Not Yet Confirmed:</span>
+        <div class="match-unconfirmed-grid">
+          ${expl.unconfirmedRequirements.map((u) => `
+            <div class="match-unconfirmed-item">
+              <span class="unconfirmed-name">⚠ ${escapeHtml(u.name)}</span>
+              <span class="unconfirmed-note">${escapeHtml(u.note)}</span>
+              ${u.isAiInterpreted ? '<span class="unconfirmed-ai-pill">AI Context</span>' : '<span class="unconfirmed-repo-pill">Repo Signal</span>'}
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    `
+    : '';
+
+  // 4. Limitations & Uncertainty Notes
+  const limitationsHtml = expl.limitations && expl.limitations.length > 0
+    ? `
+      <div class="match-limitations-box">
+        <div class="limitations-header">
+          <svg class="icon-svg warn-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          <strong>Limitations & Recommendation Uncertainty:</strong>
+        </div>
+        <ul class="limitations-list">
+          ${expl.limitations.map((lim) => `<li>${escapeHtml(lim)}</li>`).join('')}
+        </ul>
+      </div>
+    `
+    : '';
+
+  const originBadge = isAi
+    ? '<span class="match-origin-badge origin-ai" title="Suitability analyzed by local AI (qwen2.5:1.5b-instruct)">🤖 AI Analyzed</span>'
+    : '<span class="match-origin-badge origin-heuristic" title="Suitability matched by deterministic keywords and issue signals">📋 Keyword Match</span>';
+
+  return `
+    <details class="match-card-block">
+      <summary class="match-why-summary">
+        <div class="match-why-header">
+          <svg class="icon-svg match-info-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm1 15h-2v-6h2zm0-8h-2V7h2z"/></svg>
+          <span class="match-why-badge">Why this match?</span>
+          ${originBadge}
+          <span class="match-reason-preview">${escapeHtml(expl.suitabilityReason)}</span>
+        </div>
+        <div class="match-header-tags">
+          <span class="match-score-pill" title="${escapeHtml(expl.scoreDisclaimer)}">${scoreText}</span>
+          <svg class="icon-svg match-arrow" viewBox="0 0 24 24" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
+        </div>
+      </summary>
+      <div class="match-breakdown-details">
+        <!-- Suitability Explanation -->
+        <div class="match-detail-section">
+          <span class="match-section-label">Suitability Assessment:</span>
+          <p class="match-suitability-text">${escapeHtml(expl.suitabilityReason)}</p>
+        </div>
+
+        <!-- Matching Skills & Source Attribution -->
+        <div class="match-detail-section">
+          <span class="match-section-label">Matching Skills & Source Location:</span>
+          <div class="match-skills-grid">
+            ${matchingSkillsHtml}
+          </div>
+        </div>
+
+        <!-- Verified Real Quotes -->
+        ${evidenceHtml}
+
+        <!-- Unconfirmed Skills & Requirements -->
+        ${unconfirmedHtml}
+
+        <!-- Fit Score Transparency Disclaimer -->
+        <div class="match-disclaimer-box">
+          <svg class="icon-svg disclaimer-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+          <div class="disclaimer-content">
+            <strong>Fit Score Transparency:</strong> ${escapeHtml(expl.scoreDisclaimer)}
+          </div>
+        </div>
+
+        <!-- Limitations & Uncertainty -->
+        ${limitationsHtml}
+      </div>
+    </details>
+  `;
+}
+
 function renderIssueCards(issues) {
   results.innerHTML = issues.map((issue) => {
     const tags = [
@@ -1141,7 +1348,6 @@ function renderIssueCards(issues) {
     ].join('');
     const score = Number.isFinite(Number(issue.score)) ? Math.round(issue.score) + '% FIT' : 'MATCH';
     const freshness = formatIssueFreshness(issue.updatedAt);
-    const evidence = getIssueEvidence(issue);
     const issueId = escapeHtml(issue.id || '');
     const picked = Boolean(chosenIssues[issue.id]);
     const pickButtonContent = picked
@@ -1157,6 +1363,7 @@ function renderIssueCards(issues) {
     const repoUrl = 'https://github.com/' + escapeHtml(issue.repository);
     const contributingUrl = repoUrl + '/blob/HEAD/CONTRIBUTING.md';
 
+    const matchBlock = renderMatchExplanationBlock(issue);
     const diffBlock = renderDifficultyBlock(issue.difficulty);
     const health = getIssueRepoHealth(issue);
     const healthBadge = renderRepoHealthBadge(health);
@@ -1167,10 +1374,9 @@ function renderIssueCards(issues) {
 
     return [
       '<article class="issue-card">',
-      '<div class="issue-top"><div class="issue-top-left"><span class="repo">' + escapeHtml(issue.repository) + '</span>' + healthBadge + '</div><div class="issue-top-badges"><span class="score">' + score + '</span>' + difficultyBadge + similarBadge + relatedBadge + '</div></div>',
+      '<div class="issue-top"><div class="issue-top-left"><span class="repo">' + escapeHtml(issue.repository) + '</span>' + healthBadge + '</div><div class="issue-top-badges"><span class="score" title="' + escapeHtml(issue.scoreDisclaimer || 'Relative ranking estimate based on skill overlap, not a success probability') + '">' + score + '</span>' + difficultyBadge + similarBadge + relatedBadge + '</div></div>',
       '<h3 class="issue-title"><a href="' + escapeHtml(issue.url) + '" target="_blank" rel="noopener noreferrer">' + escapeHtml(issue.title) + '</a></h3>',
-      '<p class="issue-reason">' + escapeHtml(issue.reason) + '</p>',
-      '<div class="issue-evidence"><strong>Evidence from issue</strong>' + (evidence.length ? '<ul>' + evidence.map((item) => '<li><span class="evidence-source">' + escapeHtml(item.source) + '</span>' + (item.skill ? ' <span class="evidence-skill">[' + escapeHtml(item.skill) + ']</span>' : '') + ': "' + formatEvidenceQuote(item.quote, item.skill) + '"</li>').join('') + '</ul>' : '<p class="no-evidence">No exact skill phrase found in the issue text. Review it before relying on this match.</p>') + '</div>',
+      matchBlock,
       '<div class="tags">' + tags + '</div>',
       diffBlock,
       renderSkillGapBlock(issue),
@@ -1537,11 +1743,27 @@ function generateContributionPlanMarkdown() {
     const healthScoreText = health.score !== null ? `${health.score}/100 activity score` : 'Activity score unassigned';
     const related = getIssueRelatedIssues(item);
 
+    const expl = getIssueMatchExplanation(item);
+
     md += `### ${idx + 1}. [${repo}] ${title}\n\n`;
     md += `- **Issue Link**: [View on GitHub](${url})\n`;
     md += `- **Contribution Guide**: [Read CONTRIBUTING.md](${contributingUrl})\n`;
     md += `- **Difficulty**: ${diffLevel} — ${diffExplanation}\n`;
-    md += `- **Fit Score**: ${scoreText}\n`;
+    md += `- **Fit Score**: ${scoreText} *(Ranking estimate based on skill overlap, not a guarantee of success)*\n`;
+    md += `- **Match Explanation** (${expl.sourceLabel}):\n`;
+    md += `  - *Suitability*: ${expl.suitabilityReason}\n`;
+    if (expl.matchingSkills.length > 0) {
+      md += `  - *Matching Skills*: ${expl.matchingSkills.map((m) => `${m.name} (${m.verifiedInSource ? 'In ' + m.source : 'AI Inferred'})`).join(', ')}\n`;
+    }
+    if (expl.supportingEvidence && expl.supportingEvidence.length > 0) {
+      md += `  - *Verified Real Excerpts*: ${expl.supportingEvidence.map((e) => `"${e.quote}" [${e.source}]`).join('; ')}\n`;
+    }
+    if (expl.unconfirmedRequirements && expl.unconfirmedRequirements.length > 0) {
+      md += `  - *Unconfirmed Requirements*: ${expl.unconfirmedRequirements.map((u) => u.name).join(', ')}\n`;
+    }
+    if (expl.limitations && expl.limitations.length > 0) {
+      md += `  - *Limitations / Uncertainty*: ${expl.limitations.join('; ')}\n`;
+    }
     md += `- **Repository Health**: ${health.statusLabel} (${healthScoreText})\n`;
     if (health.summary) {
       md += `  - Health Summary: ${health.summary}\n`;
