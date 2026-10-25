@@ -27,6 +27,22 @@ function checkRateLimit(ip, limit = 60, windowMs = 60000) {
     reset: Math.ceil((record.resetAt - now) / 1000),
   };
 }
+async function readStaticAsset(filename) {
+  const candidatePaths = [
+    path.join(root, filename),
+    path.join(process.cwd(), filename),
+    path.join(process.cwd(), '..', filename),
+    path.join(root, '..', filename),
+  ];
+  for (const p of candidatePaths) {
+    try {
+      return await readFile(p, 'utf8');
+    } catch {
+      // try next candidate path
+    }
+  }
+  throw new Error(`Static asset not found: ${filename}`);
+}
 
 function send(res, status, value, type = 'application/json; charset=utf-8', customHeaders = {}, isHead = false) {
   const headers = {
@@ -2058,22 +2074,23 @@ export async function handleRequest(req, res) {
         url.pathname === '/live-stream' ||
         url.pathname === '/picks')
     ) {
-      const html = await readFile(path.join(root, 'index.html'), 'utf8');
+      const html = await readStaticAsset('index.html');
       return send(res, 200, html, 'text/html; charset=utf-8', {}, isHead);
     }
 
     if (isGetOrHead && url.pathname === '/styles.css') {
-      const css = await readFile(path.join(root, 'styles.css'), 'utf8');
+      const css = await readStaticAsset('styles.css');
       return send(res, 200, css, 'text/css; charset=utf-8', {}, isHead);
     }
 
     if (isGetOrHead && url.pathname === '/app.js') {
-      const js = await readFile(path.join(root, 'app.js'), 'utf8');
+      const js = await readStaticAsset('app.js');
       return send(res, 200, js, 'text/javascript; charset=utf-8', {}, isHead);
     }
 
     return send(res, 404, { error: 'Not found' });
   } catch (error) {
+    console.error('[IssueScout Server Error]:', error);
     if (error.message && error.message.includes('Payload Too Large')) {
       return send(res, 413, { error: error.message });
     }
