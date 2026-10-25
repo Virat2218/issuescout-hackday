@@ -28,7 +28,7 @@ function checkRateLimit(ip, limit = 60, windowMs = 60000) {
   };
 }
 
-function send(res, status, value, type = 'application/json; charset=utf-8', customHeaders = {}) {
+function send(res, status, value, type = 'application/json; charset=utf-8', customHeaders = {}, isHead = false) {
   const headers = {
     'Content-Type': type,
     'Cache-Control': 'no-store',
@@ -39,6 +39,10 @@ function send(res, status, value, type = 'application/json; charset=utf-8', cust
     ...customHeaders,
   };
   res.writeHead(status, headers);
+  if (isHead) {
+    res.end();
+    return;
+  }
   res.end(type.startsWith('application/json') ? JSON.stringify(value) : value);
 }
 
@@ -1708,6 +1712,7 @@ const liveStreamCache = {
   timestamp: 0,
   data: [],
   rateLimited: false,
+  isFallback: false,
 };
 
 async function fetchGitHubLiveStream() {
@@ -1718,6 +1723,7 @@ async function fetchGitHubLiveStream() {
       cached: true,
       lastUpdated: new Date(liveStreamCache.timestamp).toISOString(),
       rateLimited: liveStreamCache.rateLimited,
+      isFallback: Boolean(liveStreamCache.isFallback),
     };
   }
 
@@ -1743,6 +1749,7 @@ async function fetchGitHubLiveStream() {
           cached: true,
           lastUpdated: new Date(liveStreamCache.timestamp).toISOString(),
           rateLimited: true,
+          isFallback: Boolean(liveStreamCache.isFallback),
           notice: 'GitHub API rate limit reached. Displaying most recent verified activity records.',
         };
       }
@@ -1798,6 +1805,7 @@ async function fetchGitHubLiveStream() {
           liveStreamCache.timestamp = now;
           liveStreamCache.data = events;
           liveStreamCache.rateLimited = false;
+          liveStreamCache.isFallback = false;
           return {
             events,
             cached: false,
@@ -1829,10 +1837,15 @@ async function fetchGitHubLiveStream() {
     fallback: true,
   }));
 
+  liveStreamCache.timestamp = now;
+  liveStreamCache.data = liveStreamCache.data.length ? liveStreamCache.data : fallbackEvents;
+  liveStreamCache.rateLimited = true;
+  liveStreamCache.isFallback = true;
+
   return {
-    events: liveStreamCache.data.length ? liveStreamCache.data : fallbackEvents,
+    events: liveStreamCache.data,
     cached: true,
-    lastUpdated: liveStreamCache.timestamp ? new Date(liveStreamCache.timestamp).toISOString() : new Date().toISOString(),
+    lastUpdated: new Date(now).toISOString(),
     rateLimited: true,
     isFallback: true,
     notice: 'Direct GitHub stream rate-limited or temporarily unreachable. Showing recent verified repository issue activity.',
@@ -2017,8 +2030,10 @@ const server = http.createServer(async (req, res) => {
     }
 
     // Static Assets and SPA Clean Route Handlers (Requirement 10 & 15)
+    const isGetOrHead = req.method === 'GET' || req.method === 'HEAD';
+    const isHead = req.method === 'HEAD';
     if (
-      req.method === 'GET' &&
+      isGetOrHead &&
       (url.pathname === '/' ||
         url.pathname === '/find' ||
         url.pathname === '/blueprint' ||
@@ -2028,17 +2043,17 @@ const server = http.createServer(async (req, res) => {
         url.pathname === '/picks')
     ) {
       const html = await readFile(path.join(root, 'index.html'), 'utf8');
-      return send(res, 200, html, 'text/html; charset=utf-8');
+      return send(res, 200, html, 'text/html; charset=utf-8', {}, isHead);
     }
 
-    if (req.method === 'GET' && url.pathname === '/styles.css') {
+    if (isGetOrHead && url.pathname === '/styles.css') {
       const css = await readFile(path.join(root, 'styles.css'), 'utf8');
-      return send(res, 200, css, 'text/css; charset=utf-8');
+      return send(res, 200, css, 'text/css; charset=utf-8', {}, isHead);
     }
 
-    if (req.method === 'GET' && url.pathname === '/app.js') {
+    if (isGetOrHead && url.pathname === '/app.js') {
       const js = await readFile(path.join(root, 'app.js'), 'utf8');
-      return send(res, 200, js, 'text/javascript; charset=utf-8');
+      return send(res, 200, js, 'text/javascript; charset=utf-8', {}, isHead);
     }
 
     return send(res, 404, { error: 'Not found' });

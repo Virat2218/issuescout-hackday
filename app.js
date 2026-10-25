@@ -2345,9 +2345,9 @@ function findIssueById(issueId) {
 const VIEW_IDS = ['find', 'blueprint', 'pr-gen', 'handbook', 'stream', 'picks'];
 
 function initAppRouting() {
-  document.querySelectorAll('.nav-btn').forEach((btn) => {
+  document.querySelectorAll('.nav-tab, .nav-btn').forEach((btn) => {
     btn.addEventListener('click', () => {
-      const view = btn.dataset.view;
+      const view = btn.dataset.nav || btn.dataset.view;
       if (view && VIEW_IDS.includes(view)) {
         switchAppView(view);
       }
@@ -2373,9 +2373,11 @@ function switchAppView(viewId, updateHash = true) {
   if (!VIEW_IDS.includes(viewId)) viewId = 'find';
 
   // Toggle navigation buttons
-  document.querySelectorAll('.nav-btn').forEach((btn) => {
-    const isActive = btn.dataset.view === viewId;
+  document.querySelectorAll('.nav-tab, .nav-btn').forEach((btn) => {
+    const view = btn.dataset.nav || btn.dataset.view;
+    const isActive = view === viewId;
     btn.classList.toggle('active', isActive);
+    btn.setAttribute('aria-selected', isActive ? 'true' : 'false');
     btn.setAttribute('aria-current', isActive ? 'page' : 'false');
   });
 
@@ -3033,16 +3035,16 @@ function renderPRGeneratorView() {
   const previewBody = container.querySelector('#pr-rendered-preview');
 
   function buildMarkdownFromFields() {
-    const title = titleInput.value.trim() || 'Pull Request';
-    const issueRef = issueInput.value.trim();
-    const changeType = typeSelect.value;
-    const summary = summaryArea.value.trim();
-    const testing = testingArea.value.trim();
+    const title = titleInput?.value?.trim() || 'Pull Request';
+    const issueRef = issueInput?.value?.trim() || '';
+    const changeType = typeSelect?.value || 'Bug fix';
+    const summary = summaryArea?.value?.trim() || '';
+    const testing = testingArea?.value?.trim() || '';
 
     const checklistChecks = container.querySelectorAll('.pr-check-cb');
     const checklistLines = Array.from(checklistChecks).map((cb) => {
-      const text = cb.nextElementSibling.textContent.trim();
-      return `- [${cb.checked ? 'x' : ' '}] ${text}`;
+      const text = cb?.nextElementSibling?.textContent?.trim() || 'Checklist item';
+      return `- [${cb?.checked ? 'x' : ' '}] ${text}`;
     }).join('\n');
 
     let issueSection = '';
@@ -3077,7 +3079,7 @@ ${checklistLines}
 
   function updatePreview() {
     const md = buildMarkdownFromFields();
-    if (rawTextarea !== document.activeElement) {
+    if (rawTextarea && rawTextarea !== document.activeElement) {
       rawTextarea.value = md;
     }
     renderMarkdownToHtml(md, previewBody);
@@ -3100,7 +3102,7 @@ ${checklistLines}
   });
 
   // Raw editor listener
-  rawTextarea.addEventListener('input', () => {
+  rawTextarea?.addEventListener('input', () => {
     renderMarkdownToHtml(rawTextarea.value, previewBody);
   });
 
@@ -3480,8 +3482,39 @@ function renderGitHandbookView() {
 }
 
 /* --- 7. GitHub Live Stream View --- */
+function renderStreamLoading() {
+  const container = document.querySelector('#view-stream');
+  if (!container) return;
+  container.innerHTML = `
+    <div class="stream-container">
+      <header class="stream-header card">
+        <div class="stream-title-row">
+          <div class="title-with-pulse">
+            <span class="live-pulse-dot"></span>
+            <h2>GitHub Live Activity Stream</h2>
+          </div>
+        </div>
+        <p>Live stream of recent open-source public events across GitHub repositories. Real activity from GitHub API with intelligent caching.</p>
+        <div class="stream-status-strip">
+          <span class="status-item">Connecting to GitHub live activity…</span>
+        </div>
+      </header>
+      <div class="stream-events-feed">
+        <div class="stream-empty card" style="text-align: center; padding: 48px 20px;">
+          <div class="skeleton-bar" style="width: 50%; height: 16px; margin: 0 auto 12px; background: var(--surface-3); border-radius: 4px;"></div>
+          <div class="skeleton-bar" style="width: 35%; height: 14px; margin: 0 auto; background: var(--surface-3); border-radius: 4px;"></div>
+          <p style="margin-top: 16px; color: var(--text-3); font-size: 13px;">Fetching latest public GitHub events…</p>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
 function startStreamPolling() {
   if (streamPollingTimer) return;
+  if (!streamLastFetchedEvents || !streamLastFetchedEvents.length) {
+    renderStreamLoading();
+  }
   fetchLiveStreamEvents();
   streamPollingTimer = setInterval(() => {
     if (!streamIsPaused && document.visibilityState === 'visible') {
