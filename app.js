@@ -2250,7 +2250,7 @@ function getIssueEvidence(issue) {
    MASTER INTEGRATION: THEMES, ROUTING, BLUEPRINT, PR GEN, HANDBOOK, STREAM, PICKS
    ========================================================================== */
 
-const THEME_STORAGE_KEY = 'issuescout:theme';
+
 const SELECTED_ISSUE_KEY = 'issuescout:selected-issue';
 const BLUEPRINT_PROGRESS_KEY = 'issuescout:blueprint-progress:v1';
 const CONTRIBUTOR_USERNAME_KEY = 'issuescout:contributor-username';
@@ -2261,52 +2261,7 @@ let streamIsPaused = false;
 let streamLastFetchedEvents = [];
 let seenStreamEventIds = new Set();
 
-/* --- 1. Theme Management --- */
-function initTheme() {
-  const toggleBtn = document.querySelector('#theme-toggle');
-  let currentTheme = localStorage.getItem(THEME_STORAGE_KEY);
-
-  if (!currentTheme) {
-    currentTheme = window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
-  }
-
-  applyTheme(currentTheme);
-
-  if (toggleBtn) {
-    toggleBtn.addEventListener('click', () => {
-      const active = document.documentElement.getAttribute('data-theme') || 'dark';
-      const next = active === 'dark' ? 'light' : 'dark';
-      applyTheme(next);
-      try {
-        localStorage.setItem(THEME_STORAGE_KEY, next);
-      } catch {}
-      showNotice(`Theme switched to ${next} mode.`, 'info');
-    });
-  }
-
-  if (window.matchMedia) {
-    window.matchMedia('(prefers-color-scheme: light)').addEventListener('change', (e) => {
-      if (!localStorage.getItem(THEME_STORAGE_KEY)) {
-        applyTheme(e.matches ? 'light' : 'dark');
-      }
-    });
-  }
-}
-
-function applyTheme(theme) {
-  document.documentElement.setAttribute('data-theme', theme);
-  const toggleBtn = document.querySelector('#theme-toggle');
-  if (toggleBtn) {
-    toggleBtn.setAttribute('data-current', theme);
-    toggleBtn.title = `Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`;
-    toggleBtn.setAttribute('aria-label', `Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`);
-    toggleBtn.innerHTML = theme === 'dark'
-      ? '<svg class="icon-svg theme-icon-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>'
-      : '<svg class="icon-svg theme-icon-moon" viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>';
-  }
-}
-
-/* --- 2. Shared Selected Issue State --- */
+/* --- Shared Selected Issue State --- */
 function loadSelectedIssue() {
   try {
     const raw = localStorage.getItem(SELECTED_ISSUE_KEY);
@@ -3848,17 +3803,18 @@ async function copyToClipboard(text) {
   }
 }
 
-// Global initialization
-document.addEventListener('DOMContentLoaded', () => {
-  initTheme();
+// Global initialization - executed strictly once
+let appInitialized = false;
+function initAppOnce() {
+  if (appInitialized) return;
+  appInitialized = true;
   initAppRouting();
   updatePickButtons();
-});
+}
 
-// If DOM is already loaded
-if (document.readyState === 'complete' || document.readyState === 'interactive') {
-  initTheme();
-  initAppRouting();
-  updatePickButtons();
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initAppOnce);
+} else {
+  initAppOnce();
 }
 

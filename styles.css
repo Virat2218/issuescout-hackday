@@ -65,47 +65,7 @@
   --font-mono: var(--mono);
 }
 
-/* ── Light Theme Tokens (WCAG Accessible) ───────────── */
-:root[data-theme="light"] {
-  color-scheme: light;
 
-  /* Clean Light Surfaces */
-  --bg:        #f8fafc;
-  --surface-1: #ffffff;
-  --surface-2: #f1f5f9;
-  --surface-3: #e2e8f0;
-  --glass-bg:  rgba(255, 255, 255, 0.85);
-  --glass-border: rgba(0, 0, 0, 0.09);
-
-  /* Forest Green Brand Accent (WCAG Contrast compliant on white) */
-  --accent:      #15803d;
-  --accent-dim:  #166534;
-  --accent-glow: rgba(21, 128, 61, 0.15);
-  --accent-dark: #f0fdf4;
-
-  /* Text */
-  --text-1: #0f172a;
-  --text-2: #334155;
-  --text-3: #64748b;
-
-  /* Status */
-  --orange: #ea580c;
-  --red:    #dc2626;
-  --blue:   #2563eb;
-
-  /* Borders */
-  --line:   rgba(0, 0, 0, 0.08);
-  --line-2: rgba(0, 0, 0, 0.15);
-
-  /* Shadows */
-  --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.06), 0 4px 16px rgba(0, 0, 0, 0.04);
-  --shadow-hover: 0 4px 12px rgba(0, 0, 0, 0.08), 0 12px 28px rgba(0, 0, 0, 0.06);
-  --shadow-glow:  0 0 16px rgba(21, 128, 61, 0.12);
-
-  --color-text-muted: #475569;
-  --color-text: #0f172a;
-  --font-mono: 'JetBrains Mono', monospace;
-}
 
 /* ── Reset & Base ───────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -147,15 +107,7 @@ body::before {
   filter: blur(50px);
 }
 
-:root[data-theme="light"] body {
-  background-image: 
-    radial-gradient(ellipse 90% 45% at 50% -10%, rgba(37, 99, 235, 0.06), transparent 60%),
-    radial-gradient(circle, rgba(0, 0, 0, 0.04) 1px, transparent 1px);
-}
 
-:root[data-theme="light"] body::before {
-  background: radial-gradient(ellipse, rgba(21, 128, 61, 0.07) 0%, rgba(37, 99, 235, 0.05) 50%, transparent 70%);
-}
 
 .shell {
   max-width: 1140px;
@@ -211,9 +163,7 @@ body::before {
   box-shadow: 0 0 12px rgba(184,255,87,0.35);
 }
 
-:root[data-theme="light"] .brand-mark {
-  color: #ffffff;
-}
+
 
 .main-nav {
   display: flex;
@@ -290,37 +240,7 @@ body::before {
   margin-left: auto;
 }
 
-.theme-toggle-btn {
-  background: var(--surface-1);
-  border: 1px solid var(--line);
-  color: var(--text-2);
-  width: 34px;
-  height: 34px;
-  border-radius: var(--radius-sm);
-  display: grid;
-  place-items: center;
-  cursor: pointer;
-  transition: all 0.18s ease;
-}
 
-.theme-toggle-btn:hover {
-  background: var(--surface-2);
-  border-color: var(--line-2);
-  color: var(--text-1);
-}
-
-.theme-toggle-btn .icon-svg {
-  width: 15px;
-  height: 15px;
-  stroke: currentColor;
-  fill: none;
-  stroke-width: 2;
-}
-
-:root[data-theme="dark"] .theme-icon-moon { display: none; }
-:root[data-theme="dark"] .theme-icon-sun { display: block; }
-:root[data-theme="light"] .theme-icon-sun { display: none; }
-:root[data-theme="light"] .theme-icon-moon { display: block; }
 
 .top-meta {
   font: 11px var(--mono);
@@ -393,12 +313,7 @@ h1 span {
   background-clip: text;
 }
 
-:root[data-theme="light"] h1 span {
-  background: linear-gradient(135deg, #15803d 0%, #2563eb 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-}
+
 
 .hero-copy {
   font-size: 16.5px;
@@ -5228,16 +5143,7 @@ details[open] .match-arrow {
   border-color: rgba(255, 255, 255, 0.16);
 }
 
-:root[data-theme="light"] .card {
-  background: #ffffff;
-  border-color: rgba(0, 0, 0, 0.08);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05), 0 6px 20px rgba(0, 0, 0, 0.03);
-}
 
-:root[data-theme="light"] .card:hover {
-  border-color: rgba(0, 0, 0, 0.16);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08), 0 12px 28px rgba(0, 0, 0, 0.05);
-}
 
 /* ── Shared Primitive Buttons ──────────────────────── */
 .primary-btn, .secondary-btn, .text-btn {
@@ -5275,16 +5181,7 @@ details[open] .match-arrow {
   transform: translateY(0.5px) scale(0.98);
 }
 
-:root[data-theme="light"] .primary-btn {
-  color: #ffffff;
-  background: var(--accent);
-  box-shadow: 0 2px 10px rgba(21, 128, 61, 0.25);
-}
 
-:root[data-theme="light"] .primary-btn:hover {
-  background: var(--accent-dim);
-  border-color: var(--accent-dim);
-}
 
 .secondary-btn {
   background: rgba(255, 255, 255, 0.03);
@@ -5300,17 +5197,7 @@ details[open] .match-arrow {
   transform: translateY(-1px);
 }
 
-:root[data-theme="light"] .secondary-btn {
-  background: var(--surface-2);
-  color: var(--text-2);
-  border-color: var(--line-2);
-}
 
-:root[data-theme="light"] .secondary-btn:hover {
-  background: var(--surface-3);
-  color: var(--text-1);
-  border-color: var(--accent);
-}
 
 .text-btn {
   background: none;
