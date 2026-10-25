@@ -48,6 +48,18 @@ function send(res, status, value, type = 'application/json; charset=utf-8', cust
 
 // Request size limit enforced at 64KB to prevent denial-of-service memory exhaustion
 async function bodyJson(req, limit = 65536) {
+  if (req.body && typeof req.body === 'object') {
+    return req.body;
+  }
+  if (typeof req.body === 'string' && req.body.trim()) {
+    try {
+      return JSON.parse(req.body);
+    } catch {
+      const e = new Error('Invalid JSON in request body.');
+      e.isParseError = true;
+      throw e;
+    }
+  }
   let body = '';
   let bytes = 0;
   for await (const chunk of req) {
@@ -1852,13 +1864,17 @@ async function fetchGitHubLiveStream() {
   };
 }
 
-const server = http.createServer(async (req, res) => {
+export async function handleRequest(req, res) {
   try {
-    const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
-    const clientIp = (req.headers['x-forwarded-for'] || req.socket?.remoteAddress || '127.0.0.1').split(',')[0].trim();
+    const hostHeader = req.headers.host || 'localhost';
+    const proto = req.headers['x-forwarded-proto'] || 'http';
+    const url = new URL(req.url, `${proto}://${hostHeader}`);
+    const rawForwarded = req.headers['x-forwarded-for'];
+    const forwardedStr = Array.isArray(rawForwarded) ? rawForwarded[0] : (rawForwarded || '');
+    const clientIp = (forwardedStr.split(',')[0] || req.socket?.remoteAddress || '127.0.0.1').trim();
 
     // Production Health Endpoint (Requirement 13 & 15)
-    if (req.method === 'GET' && (url.pathname === '/health' || url.pathname === '/api/health')) {
+    if ((req.method === 'GET' || req.method === 'HEAD') && (url.pathname === '/health' || url.pathname === '/api/health')) {
       let localModelReady = false;
       try {
         const resp = await fetch(`${ollamaUrl}/api/tags`, { signal: AbortSignal.timeout(1500) });
@@ -1884,7 +1900,7 @@ const server = http.createServer(async (req, res) => {
             authenticated: Boolean(githubToken),
           },
         },
-      });
+      }, 'application/json; charset=utf-8', {}, req.method === 'HEAD');
     }
 
     if (req.method === 'GET' && url.pathname === '/api/status') {
@@ -2066,6 +2082,12 @@ const server = http.createServer(async (req, res) => {
     }
     return send(res, 500, { error: error.message || 'Unexpected server error.' });
   }
-});
+}
 
-server.listen(port, host, () => console.log(`IssueScout ready at http://${host}:${port}`));
+export const server = http.createServer(handleRequest);
+
+if (!process.env.VERCEL) {
+  server.listen(port, host, () => console.log(`IssueScout ready at http://${host}:${port}`));
+}
+
+export default handleRequest;

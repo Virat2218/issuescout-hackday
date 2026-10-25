@@ -1,0 +1,13 @@
+{
+  "version": 2,
+  "rewrites": [
+    { "source": "/api/(.*)", "destination": "/api/index.js" },
+    { "source": "/health", "destination": "/api/index.js" },
+    { "source": "/find", "destination": "/index.html" },
+    { "source": "/blueprint", "destination": "/index.html" },
+    { "source": "/pr-generator", "destination": "/index.html" },
+    { "source": "/git-handbook", "destination": "/index.html" },
+    { "source": "/live-stream", "destination": "/index.html" },
+    { "source": "/picks", "destination": "/index.html" }
+  ]
+}
